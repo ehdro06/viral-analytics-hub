@@ -1,3 +1,5 @@
+"use client";
+
 import DashboardLayout from "@/components/DashboardLayout";
 import TimeSeriesChart from "@/components/TimeSeriesChart";
 import ReferrerBreakdown from "@/components/ReferrerBreakdown";

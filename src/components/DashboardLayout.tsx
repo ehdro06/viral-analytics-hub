@@ -1,5 +1,8 @@
+"use client";
+
 import { ReactNode, useState } from "react";
-import { Link, useLocation } from "react-router-dom";
+import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   BarChart3,
@@ -26,7 +29,7 @@ function NavItem({ path, label, icon: Icon, active, onClick }: {
   onClick?: () => void;
 }) {
   return (
-    <Link to={path} onClick={onClick}>
+    <Link href={path} onClick={onClick} className="block">
       <div
         className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 ${
           active
@@ -45,7 +48,7 @@ function NavItem({ path, label, icon: Icon, active, onClick }: {
 }
 
 export default function DashboardLayout({ children }: { children: ReactNode }) {
-  const location = useLocation();
+  const pathname = usePathname();
   const [mobileOpen, setMobileOpen] = useState(false);
 
   return (
@@ -63,7 +66,7 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
             <NavItem
               key={item.path}
               {...item}
-              active={location.pathname === item.path}
+              active={pathname === item.path}
             />
           ))}
         </nav>
@@ -72,7 +75,7 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
             path="/settings"
             label="Settings"
             icon={Settings}
-            active={location.pathname === "/settings"}
+            active={pathname === "/settings"}
           />
           <div className="mt-3 mx-3 flex items-center gap-2 text-xs text-muted-foreground">
             <Shield className="w-3 h-3" />
@@ -82,48 +85,78 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
       </aside>
 
       {/* Mobile Header */}
-      <div className="flex-1 flex flex-col min-w-0">
-        <header className="lg:hidden flex items-center justify-between px-4 h-14 border-b border-border bg-sidebar">
-          <div className="flex items-center gap-2">
-            <div className="w-7 h-7 rounded-lg bg-primary/15 flex items-center justify-center">
-              <Zap className="w-3.5 h-3.5 text-primary" />
-            </div>
-            <span className="font-bold text-sm text-foreground">ViralLink</span>
+      <div className="lg:hidden fixed top-0 left-0 right-0 z-50 h-16 bg-background border-b border-border px-4 flex items-center justify-between">
+        <div className="flex items-center gap-2.5">
+          <div className="w-8 h-8 rounded-lg bg-primary/15 flex items-center justify-center">
+            <Zap className="w-4 h-4 text-primary" />
           </div>
-          <button
-            onClick={() => setMobileOpen(!mobileOpen)}
-            className="p-2 rounded-lg hover:bg-secondary text-muted-foreground"
-          >
-            {mobileOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
-          </button>
-        </header>
-
-        {/* Mobile Nav Overlay */}
-        <AnimatePresence>
-          {mobileOpen && (
-            <motion.div
-              initial={{ opacity: 0, y: -10 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -10 }}
-              className="lg:hidden absolute top-14 left-0 right-0 z-50 bg-sidebar border-b border-border p-3 space-y-1"
-            >
-              {NAV_ITEMS.map((item) => (
-                <NavItem
-                  key={item.path}
-                  {...item}
-                  active={location.pathname === item.path}
-                  onClick={() => setMobileOpen(false)}
-                />
-              ))}
-            </motion.div>
-          )}
-        </AnimatePresence>
-
-        {/* Main Content */}
-        <main className="flex-1 overflow-y-auto">
-          {children}
-        </main>
+          <span className="font-bold text-base tracking-tight text-foreground">ViralLink</span>
+        </div>
+        <button
+          onClick={() => setMobileOpen(true)}
+          className="p-2 -mr-2 text-muted-foreground hover:text-foreground"
+        >
+          <Menu className="w-6 h-6" />
+        </button>
       </div>
+
+      {/* Mobile Sidebar Overlay */}
+      <AnimatePresence>
+        {mobileOpen && (
+          <>
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setMobileOpen(false)}
+              className="fixed inset-0 z-50 bg-background/80 backdrop-blur-sm lg:hidden"
+            />
+            <motion.aside
+              initial={{ x: "-100%" }}
+              animate={{ x: 0 }}
+              exit={{ x: "-100%" }}
+              transition={{ type: "spring", damping: 20, stiffness: 300 }}
+              className="fixed inset-y-0 left-0 z-50 w-64 bg-sidebar border-r border-border lg:hidden"
+            >
+              <div className="flex items-center justify-between px-5 h-16 border-b border-border">
+                <span className="font-bold text-base tracking-tight text-foreground">Menu</span>
+                <button
+                  onClick={() => setMobileOpen(false)}
+                  className="p-2 -mr-2 text-muted-foreground hover:text-foreground"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+              <nav className="p-3 space-y-1">
+                {NAV_ITEMS.map((item) => (
+                  <NavItem
+                    key={item.path}
+                    {...item}
+                    active={pathname === item.path}
+                    onClick={() => setMobileOpen(false)}
+                  />
+                ))}
+                <div className="pt-3 mt-3 border-t border-border">
+                  <NavItem
+                    path="/settings"
+                    label="Settings"
+                    icon={Settings}
+                    active={pathname === "/settings"}
+                    onClick={() => setMobileOpen(false)}
+                  />
+                </div>
+              </nav>
+            </motion.aside>
+          </>
+        )}
+      </AnimatePresence>
+
+      {/* Main Content */}
+      <main className="flex-1 overflow-auto pt-16 lg:pt-0">
+        <div className="h-full">
+          {children}
+        </div>
+      </main>
     </div>
   );
 }

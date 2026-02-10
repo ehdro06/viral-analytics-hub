@@ -13,12 +13,16 @@ import {
   Menu,
   X,
   Shield,
+  LogOut,
 } from "lucide-react";
+import { useAuth } from "@/context/auth-context";
+import { useRouter } from "next/navigation";
+import { useEffect } from "react";
+import { Button } from "@/components/ui/button";
 
 const NAV_ITEMS = [
-  { path: "/", label: "Dashboard", icon: LayoutDashboard },
+  { path: "/analytics", label: "Dashboard", icon: LayoutDashboard }, // Changed root / to /analytics for dashboard view
   { path: "/links", label: "Links", icon: Link2 },
-  { path: "/analytics", label: "Analytics", icon: BarChart3 },
 ];
 
 function NavItem({ path, label, icon: Icon, active, onClick }: {
@@ -48,8 +52,21 @@ function NavItem({ path, label, icon: Icon, active, onClick }: {
 }
 
 export default function DashboardLayout({ children }: { children: ReactNode }) {
-  const pathname = usePathname();
   const [mobileOpen, setMobileOpen] = useState(false);
+  const { user, isLoading, logout } = useAuth();
+  const router = useRouter();
+
+  useEffect(() => {
+    if (!isLoading && !user) {
+      router.push("/login");
+    }
+  }, [user, isLoading, router]);
+
+  if (isLoading) {
+    return <div className="flex h-screen items-center justify-center">Loading...</div>;
+  }
+
+  if (!user) return null; // Or return a splash screen/loader while redirecting
 
   return (
     <div className="flex h-screen overflow-hidden bg-background">
@@ -80,6 +97,12 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
           <div className="mt-3 mx-3 flex items-center gap-2 text-xs text-muted-foreground">
             <Shield className="w-3 h-3" />
             <span>IPs anonymized (GDPR)</span>
+            {user && (
+                 <div className="flex items-center gap-2 ml-2">
+                    <span className="font-bold">{user.name}</span>
+                    <Button variant="ghost" size="icon" className="h-6 w-6" onClick={logout}><LogOut className="h-3 w-3"/></Button>
+                 </div>
+            )}
           </div>
         </div>
       </aside>

@@ -1,6 +1,7 @@
 package com.virallink.user.config;
 
 import com.virallink.user.service.CustomOAuth2UserService;
+import com.virallink.user.service.CustomOidcUserService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -20,6 +21,7 @@ import java.util.List;
 public class SecurityConfig {
 
     private final CustomOAuth2UserService customOAuth2UserService;
+    private final CustomOidcUserService customOidcUserService;
 
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
@@ -32,12 +34,17 @@ public class SecurityConfig {
             )
             .oauth2Login(oauth2 -> oauth2
                 .userInfoEndpoint(userInfo -> userInfo
-                    .userService(customOAuth2UserService) // Persist user on login
+                    // OIDC (e.g., Google) uses OidcUserService; GitHub uses OAuth2UserService
+                    .oidcUserService(customOidcUserService)
+                    .userService(customOAuth2UserService) // Persist user on login for non-OIDC providers
                 )
-                .defaultSuccessUrl("http://localhost:3000/dashboard", true) // Redirect to frontend after login
+                .defaultSuccessUrl("http://localhost:3001", true) // Redirect to frontend after login
             )
             .logout(logout -> logout
-                .logoutSuccessUrl("http://localhost:3000")
+                .logoutSuccessUrl("http://localhost:3001/login")
+                .invalidateHttpSession(true)
+                // Spring Session (Redis) uses "SESSION" cookie; Tomcat fallback uses JSESSIONID
+                .deleteCookies("JSESSIONID", "SESSION")
                 .permitAll()
             );
 
@@ -47,7 +54,7 @@ public class SecurityConfig {
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration configuration = new CorsConfiguration();
-        configuration.setAllowedOrigins(List.of("http://localhost:3000")); // Next.js Frontend
+        configuration.setAllowedOrigins(List.of("http://localhost:3001")); // Next.js Frontend
         configuration.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS"));
         configuration.setAllowedHeaders(List.of("*"));
         configuration.setAllowCredentials(true); // Allow Cookies (Session ID)

@@ -20,12 +20,15 @@ const fetchUser = async (): Promise<User | null> => {
 };
 
 const logoutUser = async () => {
-   try {
-        await fetch("/logout"); 
-    } catch (e) {
-        // ignore
-    }
-}
+  try {
+    await fetch("/logout", {
+      method: "POST",
+      credentials: "include", // ensure JSESSIONID is sent so Spring can invalidate
+    });
+  } catch (e) {
+    // ignore
+  }
+};
 
 export function useUser() {
   const { setUser, logout: clearStore } = useAuthStore();
@@ -51,13 +54,13 @@ export function useUser() {
     // If it's a mock user (handled in component potentially, or check email)
     // We can just rely on the store state in most cases, but for real auth:
     await logoutUser();
-    
+
     clearStore();
     queryClient.setQueryData(["user"], null);
     queryClient.removeQueries({ queryKey: ["user"] });
-    
-    // Hard navigate to clear cookies/state
-    window.location.href = "/"; 
+
+    // Hard navigate to login to avoid any cached state
+    window.location.href = "/login";
   };
   
   // Dev Helper
@@ -70,7 +73,7 @@ export function useUser() {
       // We manually seed the query cache
       queryClient.setQueryData(["user"], mockUser);
       setUser(mockUser);
-      router.push("/analytics");
+      router.push("/");
   }
 
   return {

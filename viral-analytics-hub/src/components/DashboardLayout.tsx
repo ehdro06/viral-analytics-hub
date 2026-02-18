@@ -15,7 +15,7 @@ import {
   Shield,
   LogOut,
 } from "lucide-react";
-import { useAuth } from "@/context/auth-context";
+import { useUser } from "@/hooks/use-user";
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
 import { Button } from "@/components/ui/button";
@@ -53,8 +53,9 @@ function NavItem({ path, label, icon: Icon, active, onClick }: {
 
 export default function DashboardLayout({ children }: { children: ReactNode }) {
   const [mobileOpen, setMobileOpen] = useState(false);
-  const { user, isLoading, logout } = useAuth();
+  const { user, isLoading, logout } = useUser();
   const router = useRouter();
+  const pathname = usePathname(); // Missing hook call added
 
   useEffect(() => {
     if (!isLoading && !user) {

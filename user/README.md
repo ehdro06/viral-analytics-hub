@@ -21,7 +21,7 @@ export SPRING_SECURITY_OAUTH2_CLIENT_REGISTRATION_GITHUB_CLIENT_ID=your-github-c
 export SPRING_SECURITY_OAUTH2_CLIENT_REGISTRATION_GITHUB_CLIENT_SECRET=your-github-client-secret
 
 # Database (If not using defaults)
-export SPRING_DATASOURCE_URL=jdbc:postgresql://localhost:5432/virallink_user
+export SPRING_DATASOURCE_URL=jdbc:postgresql://localhost:5433/virallink_user
 export SPRING_DATASOURCE_USERNAME=postgres
 export SPRING_DATASOURCE_PASSWORD=postgres
 

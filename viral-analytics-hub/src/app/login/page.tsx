@@ -2,14 +2,14 @@
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { useAuth } from "@/context/auth-context";
+import { useUser } from "@/hooks/use-user";
 import { Github, Mail } from "lucide-react";
 import Link from "next/link";
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 
 export default function LoginPage() {
-  const { loginWithMock, user } = useAuth();
+  const { loginWithMock, user } = useUser();
   const router = useRouter();
 
   useEffect(() => {
@@ -35,12 +35,14 @@ export default function LoginPage() {
                 Sign in with Google
             </Link>
           </Button>
+          {/* GitHub Login - Temporarily disabled for MVP
           <Button variant="outline" className="w-full" asChild>
             <Link href="/oauth2/authorization/github">
                 <Github className="mr-2 h-4 w-4" />
                 Sign in with GitHub
             </Link>
           </Button>
+          */}
 
           <div className="relative">
             <div className="absolute inset-0 flex items-center">

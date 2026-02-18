@@ -42,13 +42,21 @@ public class CustomOAuth2UserService extends DefaultOAuth2UserService {
         String tempName = (String) attributes.get("name");
 
         if (registrationId.equals("github")) {
-            Integer id = (Integer) attributes.get("id");
-            tempProviderId = String.valueOf(id);
-             if (tempEmail == null) {
-                tempEmail = (String) attributes.get("login") + "@github.com";
+            // GitHub IDs are often Integers in the attributes map
+            tempProviderId = String.valueOf(attributes.get("id"));
+            
+            // Fallback for Email: user:email scope usually populates "email"
+            // but sometimes it's still null if not verified
+            tempEmail = (String) attributes.get("email");
+            if (tempEmail == null) {
+                tempEmail = attributes.get("login") + "@github.com"; 
             }
-        } else if (registrationId.equals("google")) {
-            tempProviderId = (String) attributes.get("sub");
+
+            // Fallback for Name: Use 'login' if 'name' is empty
+            tempName = (String) attributes.get("name");
+            if (tempName == null || tempName.isEmpty()) {
+                tempName = (String) attributes.get("login");
+            }
         }
         
         String finalProviderId = tempProviderId;

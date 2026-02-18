@@ -9,12 +9,13 @@ import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 
 export default function LoginPage() {
+  const backendBase = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8080";
   const { loginWithMock, user } = useUser();
   const router = useRouter();
 
   useEffect(() => {
     if (user) {
-      router.push("/analytics");
+      router.push("/");
     }
   }, [user, router]);
 
@@ -30,20 +31,17 @@ export default function LoginPage() {
         <CardContent className="grid gap-4">
             {/* Real OAuth Endpoints */}
           <Button variant="outline" className="w-full" asChild>
-            <Link href="/oauth2/authorization/google">
-                <Mail className="mr-2 h-4 w-4" />
-                Sign in with Google
-            </Link>
+            <a href={`${backendBase}/oauth2/authorization/google`}>
+              <Mail className="mr-2 h-4 w-4" />
+              Sign in with Google
+            </a>
           </Button>
-          {/* GitHub Login - Temporarily disabled for MVP
           <Button variant="outline" className="w-full" asChild>
-            <Link href="/oauth2/authorization/github">
+            <a href={`${backendBase}/oauth2/authorization/github`}>
                 <Github className="mr-2 h-4 w-4" />
                 Sign in with GitHub
-            </Link>
+            </a>
           </Button>
-          */}
-
           <div className="relative">
             <div className="absolute inset-0 flex items-center">
               <span className="w-full border-t" />

@@ -1,6 +1,6 @@
 "use client";
 
-import { ReactNode, useState } from "react";
+import { ReactNode, useState, ElementType } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
@@ -21,14 +21,15 @@ import { useEffect } from "react";
 import { Button } from "@/components/ui/button";
 
 const NAV_ITEMS = [
-  { path: "/analytics", label: "Dashboard", icon: LayoutDashboard }, // Changed root / to /analytics for dashboard view
+  { path: "/", label: "Dashboard", icon: LayoutDashboard },
+  { path: "/analytics", label: "Analytics", icon: BarChart3 },
   { path: "/links", label: "Links", icon: Link2 },
 ];
 
 function NavItem({ path, label, icon: Icon, active, onClick }: {
   path: string;
   label: string;
-  icon: typeof LayoutDashboard;
+  icon: ElementType;
   active: boolean;
   onClick?: () => void;
 }) {

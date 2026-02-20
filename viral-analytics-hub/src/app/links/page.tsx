@@ -7,10 +7,10 @@ import { Input } from "@/components/ui/input";
 import DashboardLayout from "@/components/DashboardLayout";
 import LinksTable from "@/components/LinksTable";
 import LinkCreationDialog from "@/components/LinkCreationDialog";
-import { useMockData } from "@/hooks/use-mock-data";
+import { useLinks } from "@/hooks/use-links";
 
 export default function LinksPage() {
-  const { links, createLink } = useMockData();
+  const { links, createLink, deleteLink } = useLinks();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [search, setSearch] = useState("");
 
@@ -46,12 +46,15 @@ export default function LinksPage() {
           />
         </div>
 
-        <LinksTable links={filtered} />
+        <LinksTable links={filtered} onDelete={deleteLink} />
 
         <LinkCreationDialog
           open={dialogOpen}
           onClose={() => setDialogOpen(false)}
-          onCreate={createLink}
+          onCreate={(url) => {
+            createLink(url);
+            setDialogOpen(false);
+          }}
         />
       </div>
     </DashboardLayout>

@@ -3,6 +3,12 @@ import type { NextConfig } from "next";
 const nextConfig: NextConfig = {
   async rewrites() {
     return [
+      // Redirect Service (Links)
+      {
+        source: "/api/v1/links/:path*",
+        destination: "http://localhost:8081/api/v1/links/:path*",
+      },
+      // User Service (Authentication & Users)
       {
         source: "/api/:path*",
         destination: "http://localhost:8080/api/:path*",

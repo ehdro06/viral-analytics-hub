@@ -2,6 +2,7 @@ package com.virallink.user.controller;
 
 import com.virallink.user.model.User;
 import com.virallink.user.service.UserService;
+import com.virallink.user.service.JwtService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -17,9 +18,12 @@ import java.util.Map;
 public class UserController {
 
     private final UserService userService;
+    private final JwtService jwtService;
+
+    public record UserResponse(Long id, String email, String name, String token) {}
 
     @GetMapping("/me")
-    public ResponseEntity<User> getCurrentUser(@AuthenticationPrincipal OAuth2User principal, 
+    public ResponseEntity<UserResponse> getCurrentUser(@AuthenticationPrincipal OAuth2User principal, 
                                                OAuth2AuthenticationToken token) {
         if (principal == null) {
             return ResponseEntity.status(401).build();
@@ -27,7 +31,11 @@ public class UserController {
         
         // Identify user from DB
         User user = resolveUser(token, principal);
-        return ResponseEntity.ok(user);
+        
+        // Generate Token
+        String jwtToken = jwtService.generateToken(Map.of("userId", user.getId()), user.getEmail());
+        
+        return ResponseEntity.ok(new UserResponse(user.getId(), user.getEmail(), user.getName(), jwtToken));
     }
 
     @PostMapping("/keys")

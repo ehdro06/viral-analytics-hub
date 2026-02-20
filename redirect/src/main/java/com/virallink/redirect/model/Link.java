@@ -1,4 +1,4 @@
-package virallink.redirect.model;
+package com.virallink.redirect.model;
 
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
@@ -33,6 +33,6 @@ public class Link {
     @Column(updatable = false)
     private LocalDateTime createdAt;
     
-    // Optional: User ID if we want to associate links with users later
-    // private String userId; 
+    @Column(nullable = false)
+    private Long userId; 
 }

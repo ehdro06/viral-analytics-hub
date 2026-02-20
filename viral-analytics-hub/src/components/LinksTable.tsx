@@ -1,15 +1,22 @@
 import { LinkItem } from "@/hooks/use-mock-data";
 import { motion } from "framer-motion";
-import { ExternalLink, Copy, MoreHorizontal } from "lucide-react";
+import { ExternalLink, Copy, MoreHorizontal, Trash2 } from "lucide-react";
 import { toast } from "sonner";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 interface LinksTableProps {
   links: LinkItem[];
+  onDelete?: (id: string) => void;
 }
 
-export default function LinksTable({ links }: LinksTableProps) {
+export default function LinksTable({ links, onDelete }: LinksTableProps) {
   const copyLink = (code: string) => {
-    navigator.clipboard.writeText(`vrl.ink/${code}`);
+    navigator.clipboard.writeText(`http://localhost:8081/${code}`); // Use local for now
     toast.success("Copied to clipboard!");
   };
 
@@ -92,9 +99,26 @@ export default function LinksTable({ links }: LinksTableProps) {
                   </span>
                 </td>
                 <td className="px-5 py-3.5 text-right">
-                  <button className="p-1 rounded hover:bg-secondary text-muted-foreground">
-                    <MoreHorizontal className="w-4 h-4" />
-                  </button>
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <button className="p-1 rounded hover:bg-secondary text-muted-foreground outline-none">
+                        <MoreHorizontal className="w-4 h-4" />
+                      </button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end">
+                      <DropdownMenuItem onClick={() => copyLink(link.shortCode)}>
+                        <Copy className="mr-2 h-4 w-4" />
+                        <span>Copy Link</span>
+                      </DropdownMenuItem>
+                      <DropdownMenuItem 
+                        className="text-destructive focus:text-destructive"
+                        onClick={() => onDelete?.(link.id)}
+                      >
+                        <Trash2 className="mr-2 h-4 w-4" />
+                        <span>Delete</span>
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
                 </td>
               </motion.tr>
             ))}

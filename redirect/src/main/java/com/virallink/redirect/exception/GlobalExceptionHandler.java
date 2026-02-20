@@ -1,4 +1,4 @@
-package virallink.redirect.exception;
+package com.virallink.redirect.exception;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;

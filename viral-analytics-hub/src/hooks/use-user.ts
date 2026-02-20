@@ -3,18 +3,13 @@ import { useAuthStore } from "./use-auth-store";
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
 
-interface User {
-  name: string;
-  email: string;
-  tier: "FREE" | "PRO";
-}
-
 // Fetch user from backend
-const fetchUser = async (): Promise<User | null> => {
+const fetchUser = async () => {
   const res = await fetch("/api/v1/users/me");
   if (!res.ok) {
      if (res.status === 401) return null;
-     throw new Error("Failed to fetch user");
+     // Allow 403 or other errors to throw?
+     return null; 
   }
   return res.json();
 };
@@ -22,9 +17,8 @@ const fetchUser = async (): Promise<User | null> => {
 const logoutUser = async () => {
   try {
     await fetch("/logout", {
-      method: "POST",
-      credentials: "include", // ensure JSESSIONID is sent so Spring can invalidate
-    });
+        method: "POST",
+    }); // Spring Security default logout
   } catch (e) {
     // ignore
   }
@@ -35,49 +29,50 @@ export function useUser() {
   const queryClient = useQueryClient();
   const router = useRouter();
 
-  const { data: user, isLoading, isError, error } = useQuery({
+  const { data: userData, isLoading, isError } = useQuery({
     queryKey: ["user"],
     queryFn: fetchUser,
-    retry: false, // Don't retry 401s
-    staleTime: 1000 * 60 * 5, // 5 minutes (Profile doesn't change often)
+    retry: false, 
+    staleTime: 1000 * 60 * 5, 
   });
 
   // Sync Zustand with Query Data
   useEffect(() => {
-    if (user !== undefined) {
-        setUser(user);
+    if (userData) {
+        // Backend returns: { id, email, name, token }
+        const { token, ...userFields } = userData;
+        // Default tier to FREE for now
+        setUser({ ...userFields, tier: "FREE" }, token);
+    } else if (userData === null && !isLoading) {
+        // Explicitly clear if null returned (401)
+        // clearStore(); // Optional: might cause loops if not careful
     }
-  }, [user, setUser]);
+  }, [userData, setUser, isLoading]);
 
   // Handle Logout
   const logout = async () => {
-    // If it's a mock user (handled in component potentially, or check email)
-    // We can just rely on the store state in most cases, but for real auth:
     await logoutUser();
-
     clearStore();
-    queryClient.setQueryData(["user"], null);
     queryClient.removeQueries({ queryKey: ["user"] });
-
-    // Hard navigate to login to avoid any cached state
     window.location.href = "/login";
   };
   
   // Dev Helper
   const loginWithMock = () => {
-      const mockUser: User = {
+      const mockUser = {
+        id: "mock-1",
         name: "Admin User",
         email: "admin@virallink.com",
-        tier: "PRO",
+        tier: "PRO" as const,
       };
       // We manually seed the query cache
-      queryClient.setQueryData(["user"], mockUser);
-      setUser(mockUser);
+      // queryClient.setQueryData(["user"], { ...mockUser, token: "mock-jwt" });
+      setUser(mockUser, "mock-jwt-token-xyz");
       router.push("/");
   }
 
   return {
-    user,
+    user: userData, // This will be the full response including token, but component usually just needs user
     isLoading,
     isError,
     logout,

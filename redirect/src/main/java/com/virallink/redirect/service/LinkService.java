@@ -1,13 +1,15 @@
-package virallink.redirect.service;
+package com.virallink.redirect.service;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.hashids.Hashids;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import virallink.redirect.model.Link;
-import virallink.redirect.repository.LinkRepository;
+
+import com.virallink.redirect.model.Link;
+import com.virallink.redirect.repository.LinkRepository;
 
 import java.net.URI;
 import java.net.URISyntaxException;
@@ -30,19 +32,15 @@ public class LinkService {
 
     /**
      * Create a short link.
-     * 1. Validate URL.
-     * 2. Persist to DB -> Getting generated ID.
-     * 3. Hashids Encode ID.
-     * 4. Update DB with shortCode.
-     * 5. Hydrate Redis.
      */
     @Transactional
-    public Link createLink(String originalUrl) {
+    public Link createLink(String originalUrl, Long userId) {
         validateUrl(originalUrl);
         
         // Save first to get ID
         Link link = Link.builder()
                 .longUrl(originalUrl)
+                .userId(userId)
                 .shortCode("") // temporary
                 .build();
         
@@ -90,6 +88,20 @@ public class LinkService {
         }
         
         return Optional.empty();
+    }
+
+    public java.util.List<Link> getLinksByUserId(Long userId) {
+        return linkRepository.findByUserId(userId);
+    }
+    
+    @Transactional
+    public void deleteLink(Long id, Long userId) {
+        Optional<Link> link = linkRepository.findByIdAndUserId(id, userId);
+        if (link.isPresent()) {
+            Link l = link.get();
+            redisTemplate.delete(REDIS_PREFIX + l.getShortCode());
+            linkRepository.delete(l);
+        }
     }
 
     private void validateUrl(String url) {

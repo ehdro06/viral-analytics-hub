@@ -5,6 +5,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import jakarta.servlet.http.HttpServletRequest;
 
 import com.virallink.redirect.model.Link;
 import com.virallink.redirect.service.LinkService;
@@ -22,11 +23,22 @@ public class RedirectController {
 
     private final LinkService linkService;
 
-    // Hot Path: Redirect
     @GetMapping("/{shortCode}")
-    public ResponseEntity<Void> redirect(@PathVariable String shortCode) {
+    public ResponseEntity<Void> redirect(@PathVariable("shortCode") String shortCode, HttpServletRequest request) {
         log.info("Redirect Request: {}", shortCode);
-        Optional<String> longUrlOpt = linkService.resolveLink(shortCode);
+        
+        String ipAddress = request.getHeader("X-Forwarded-For");
+        if (ipAddress == null || ipAddress.isEmpty()) {
+            ipAddress = request.getRemoteAddr();
+        } else {
+            // X-Forwarded-For may contain multiple IPs, the first one is the client
+            ipAddress = ipAddress.split(",")[0].trim();
+        }
+        
+        String userAgent = request.getHeader("User-Agent");
+        String referer = request.getHeader("Referer");
+
+        Optional<String> longUrlOpt = linkService.resolveLink(shortCode, ipAddress, userAgent, referer);
         
         if (longUrlOpt.isPresent()) {
             return ResponseEntity.status(HttpStatus.FOUND) // 302 Found (Analytics friendly)

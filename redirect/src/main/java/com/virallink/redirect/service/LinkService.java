@@ -23,6 +23,7 @@ public class LinkService {
 
     private final LinkRepository linkRepository;
     private final StringRedisTemplate redisTemplate;
+    private final AnalyticsService analyticsService;
     
     @Autowired
     private Hashids hashids;
@@ -66,7 +67,10 @@ public class LinkService {
      * 2. If miss, check DB (Cold Path).
      * 3. Hydrate Redis if found in DB.
      */
-    public Optional<String> resolveLink(String shortCode) {
+    public Optional<String> resolveLink(String shortCode, String ipAddress, String userAgent, String referer) {
+        // Fire and forget analytics -> To Redis Stream/Counter
+        analyticsService.trackClick(shortCode, ipAddress, userAgent, referer);
+
         String cacheKey = REDIS_PREFIX + shortCode;
         
         // L1 Cache check
@@ -91,7 +95,17 @@ public class LinkService {
     }
 
     public java.util.List<Link> getLinksByUserId(Long userId) {
-        return linkRepository.findByUserId(userId);
+        java.util.List<Link> links = linkRepository.findByUserId(userId);
+        
+        // Enrich with real-time stats from Redis (The "Single Source Aggregation" Pattern)
+        links.forEach(link -> {
+            String clicks = redisTemplate.opsForValue().get("stats:link:" + link.getShortCode() + ":clicks");
+            if (clicks != null) {
+                link.setClickCount(Long.parseLong(clicks));
+            }
+        });
+        
+        return links;
     }
     
     @Transactional

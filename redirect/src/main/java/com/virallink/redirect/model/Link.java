@@ -35,4 +35,7 @@ public class Link {
     
     @Column(nullable = false)
     private Long userId; 
+
+    @Transient
+    private long clickCount;
 }

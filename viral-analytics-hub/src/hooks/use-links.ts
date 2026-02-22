@@ -41,7 +41,7 @@ export function useLinks() {
         enabled: !!token, 
     });
 
-    // Create Link
+    // Create Link (with Optimistic Update)
     const createMutation = useMutation({
         mutationFn: async (originalUrl: string) => {
             const res = await fetch("/api/v1/links", {
@@ -53,14 +53,39 @@ export function useLinks() {
                 body: JSON.stringify({ longUrl: originalUrl }),
             });
             if (!res.ok) throw new Error("Failed to create link");
-            return res.json(); // Returns { shortCode, longUrl }
+            return res.json(); 
         },
-        onSuccess: () => {
+        onMutate: async (newVar) => {
+            await queryClient.cancelQueries({ queryKey: ["links"] });
+            const previousLinks = queryClient.getQueryData<LinkItem[]>(["links"]);
+
+            // Optimistically add a placeholder
+            queryClient.setQueryData<LinkItem[]>(["links"], (old = []) => [
+                {
+                    id: 'temp-' + Date.now(),
+                    shortCode: '...',
+                    originalUrl: newVar,
+                    totalClicks: 0,
+                    status: 'active',
+                    createdAt: new Date().toISOString(),
+                    rules: []
+                },
+                ...old,
+            ]);
+
+            return { previousLinks };
+        },
+        onError: (err, newVar, context) => {
+            if (context?.previousLinks) {
+                queryClient.setQueryData(["links"], context.previousLinks);
+            }
+        },
+        onSettled: () => {
             queryClient.invalidateQueries({ queryKey: ["links"] });
         }
     });
 
-    // Delete Link
+    // Delete Link (with Optimistic Update)
     const deleteMutation = useMutation({
         mutationFn: async (id: string) => {
             const res = await fetch(`/api/v1/links/${id}`, {
@@ -69,7 +94,22 @@ export function useLinks() {
             });
             if (!res.ok) throw new Error("Failed to delete link");
         },
-        onSuccess: () => {
+        onMutate: async (deletedId) => {
+            await queryClient.cancelQueries({ queryKey: ["links"] });
+            const previousLinks = queryClient.getQueryData<LinkItem[]>(["links"]);
+
+            queryClient.setQueryData<LinkItem[]>(["links"], (old) => 
+                old ? old.filter((link) => link.id !== deletedId) : []
+            );
+
+            return { previousLinks };
+        },
+        onError: (err, deletedId, context) => {
+            if (context?.previousLinks) {
+                queryClient.setQueryData(["links"], context.previousLinks);
+            }
+        },
+        onSettled: () => {
             queryClient.invalidateQueries({ queryKey: ["links"] });
         }
     });

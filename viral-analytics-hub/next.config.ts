@@ -8,6 +8,11 @@ const nextConfig: NextConfig = {
         source: "/api/v1/links/:path*",
         destination: "http://localhost:8081/api/v1/links/:path*",
       },
+      // Analytics Service
+      {
+        source: "/api/v1/analytics/:path*",
+        destination: "http://localhost:8082/api/v1/analytics/:path*",
+      },
       // User Service (Authentication & Users)
       {
         source: "/api/:path*",

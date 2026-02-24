@@ -10,14 +10,15 @@ interface BackendLink {
     longUrl: string;
     createdAt: string;
     userId: number;
+    clickCount?: number; // provided by backend, transient/enriched from Redis
 }
 
 const mapBackendToFrontend = (link: BackendLink): LinkItem => ({
     id: link.id.toString(),
     shortCode: link.shortCode,
     originalUrl: link.longUrl,
-    totalClicks: 0, // Placeholder
-    status: "active", // Placeholder
+    totalClicks: link.clickCount ?? 0,
+    status: "active", // TODO: wire to real status when available
     createdAt: link.createdAt,
     rules: []
 });
@@ -38,6 +39,9 @@ export function useLinks() {
              const data: BackendLink[] = await res.json();
              return data.map(mapBackendToFrontend);
         },
+        refetchInterval: 10000, 
+        refetchIntervalInBackground: false,
+        refetchOnWindowFocus: true,
         enabled: !!token, 
     });
 

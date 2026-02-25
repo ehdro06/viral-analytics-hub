@@ -3,6 +3,11 @@ import type { NextConfig } from "next";
 const nextConfig: NextConfig = {
   async rewrites() {
     return [
+      // Expander Service (Public Utility)
+      {
+        source: "/api/v1/expand",
+        destination: "http://localhost:8081/api/expand",
+      },
       // Redirect Service (Links)
       {
         source: "/api/v1/links/:path*",

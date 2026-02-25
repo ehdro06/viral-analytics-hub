@@ -25,6 +25,7 @@ public class SecurityConfig {
             .csrf(AbstractHttpConfigurer::disable)
             .authorizeHttpRequests(auth -> auth
                 .requestMatchers("/api/v1/links/**").authenticated() // Secure API
+                .requestMatchers("/api/expand", "/api/expand/**").permitAll() // Public expander
                 .requestMatchers("/{shortCode}").permitAll()         // Public Redirect
                 .anyRequest().permitAll()                            // Actuator, etc
             )

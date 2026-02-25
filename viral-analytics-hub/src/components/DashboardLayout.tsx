@@ -21,7 +21,7 @@ import { useEffect } from "react";
 import { Button } from "@/components/ui/button";
 
 const NAV_ITEMS = [
-  { path: "/", label: "Dashboard", icon: LayoutDashboard },
+  { path: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { path: "/analytics", label: "Analytics", icon: BarChart3 },
   { path: "/links", label: "Links", icon: Link2 },
 ];

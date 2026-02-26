@@ -18,6 +18,16 @@ public class ExpandController {
     public ResponseEntity<ExpandResult> expand(@RequestParam("url") String url) {
         try {
             ExpandResult result = urlExpandService.expand(url);
+            
+            // Check Google Safe Browsing on the final URL if it resolved successfully
+            if (result.isSafe() && result.getFinalUrl() != null) {
+                boolean isGoogleSafe = urlExpandService.checkSafeBrowsing(result.getFinalUrl());
+                if (!isGoogleSafe) {
+                    result.setSafe(false);
+                    result.setNote("Flagged by Google Safe Browsing");
+                }
+            }
+            
             return ResponseEntity.ok(result);
         } catch (IllegalArgumentException e) {
             return ResponseEntity.badRequest().build();

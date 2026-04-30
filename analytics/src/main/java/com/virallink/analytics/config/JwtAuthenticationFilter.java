@@ -1,4 +1,4 @@
-package com.virallink.redirect.config;
+package com.virallink.analytics.config;
 
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.Jwts;
@@ -33,8 +33,11 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     private String apiKeySigningSecret;
 
     @Override
-    protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain)
-            throws ServletException, IOException {
+    protected void doFilterInternal(
+        HttpServletRequest request,
+        HttpServletResponse response,
+        FilterChain filterChain
+    ) throws ServletException, IOException {
 
         authenticateWithJwt(request);
         if (SecurityContextHolder.getContext().getAuthentication() == null) {
@@ -53,24 +56,24 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         String jwt = authHeader.substring(7);
         try {
             Claims claims = Jwts.parser()
-                    .verifyWith(getSignInKey())
-                    .build()
-                    .parseSignedClaims(jwt)
-                    .getPayload();
+                .verifyWith(getSignInKey())
+                .build()
+                .parseSignedClaims(jwt)
+                .getPayload();
 
+            String subject = claims.getSubject();
             Long userId = claims.get("userId", Long.class);
-            String email = claims.getSubject();
-
-            if (email != null && userId != null) {
+            Object principal = userId != null ? userId : subject;
+            if (principal != null && SecurityContextHolder.getContext().getAuthentication() == null) {
                 UsernamePasswordAuthenticationToken authToken = new UsernamePasswordAuthenticationToken(
-                        userId,
-                        null,
-                        Collections.emptyList()
+                    principal,
+                    null,
+                    Collections.emptyList()
                 );
                 SecurityContextHolder.getContext().setAuthentication(authToken);
             }
-        } catch (Exception e) {
-            logger.debug("JWT validation failed: {}", e.getMessage());
+        } catch (Exception ignored) {
+            // Invalid token; leave request unauthenticated
         }
     }
 
@@ -86,9 +89,9 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         }
 
         UsernamePasswordAuthenticationToken authToken = new UsernamePasswordAuthenticationToken(
-                userId,
-                null,
-                Collections.emptyList()
+            userId,
+            null,
+            Collections.emptyList()
         );
         SecurityContextHolder.getContext().setAuthentication(authToken);
     }
@@ -103,8 +106,8 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         String providedSecret = parts[1];
         String expectedSecret = signPrefix(prefix);
         if (!MessageDigest.isEqual(
-                providedSecret.getBytes(StandardCharsets.UTF_8),
-                expectedSecret.getBytes(StandardCharsets.UTF_8)
+            providedSecret.getBytes(StandardCharsets.UTF_8),
+            expectedSecret.getBytes(StandardCharsets.UTF_8)
         )) {
             return null;
         }
@@ -123,8 +126,8 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         try {
             Mac mac = Mac.getInstance("HmacSHA256");
             SecretKeySpec keySpec = new SecretKeySpec(
-                    apiKeySigningSecret.getBytes(StandardCharsets.UTF_8),
-                    "HmacSHA256"
+                apiKeySigningSecret.getBytes(StandardCharsets.UTF_8),
+                "HmacSHA256"
             );
             mac.init(keySpec);
             byte[] signature = mac.doFinal(prefix.getBytes(StandardCharsets.UTF_8));
@@ -139,3 +142,4 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         return Keys.hmacShaKeyFor(keyBytes);
     }
 }
+

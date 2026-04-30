@@ -16,6 +16,8 @@ export default function AnalyticsPage() {
     queryKey: ["analytics-summary"],
     enabled: !!token,
     retry: 1,
+    refetchInterval: 10_000,
+    refetchIntervalInBackground: false,
     queryFn: async () => {
       const res = await fetch("/api/v1/analytics/summary", {
         headers: token ? { Authorization: `Bearer ${token}` } : undefined,

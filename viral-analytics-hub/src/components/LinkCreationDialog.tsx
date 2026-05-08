@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Plus, X, Link2, ArrowRight, Smartphone, Globe, Monitor } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { SmartRule } from "@/hooks/use-mock-data";
+import type { SmartRule } from "@/types/virallink";
 
 interface LinkCreationDialogProps {
   open: boolean;

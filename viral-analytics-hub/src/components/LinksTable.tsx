@@ -1,4 +1,4 @@
-import { LinkItem } from "@/hooks/use-mock-data";
+import type { LinkItem } from "@/types/virallink";
 import { motion } from "framer-motion";
 import { ExternalLink, Copy, MoreHorizontal, Trash2 } from "lucide-react";
 import { toast } from "sonner";

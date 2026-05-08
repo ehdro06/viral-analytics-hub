@@ -1,4 +1,4 @@
-import { GeoDataPoint } from "@/hooks/use-mock-data";
+import type { GeoDataPoint } from "@/types/virallink";
 import { motion } from "framer-motion";
 import { Globe } from "lucide-react";
 

@@ -8,7 +8,7 @@ import {
   Tooltip,
   ResponsiveContainer,
 } from "recharts";
-import { TimeSeriesPoint } from "@/hooks/use-mock-data";
+import type { TimeSeriesPoint } from "@/types/virallink";
 
 interface TimeSeriesChartProps {
   data: TimeSeriesPoint[];

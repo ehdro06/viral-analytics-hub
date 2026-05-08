@@ -1,5 +1,6 @@
 package com.virallink.analytics.service;
 
+import com.virallink.analytics.events.ClickEventStreamFields;
 import com.virallink.analytics.model.LinkAnalytics;
 import com.virallink.analytics.repository.LinkAnalyticsRepository;
 import jakarta.annotation.PostConstruct;
@@ -15,7 +16,6 @@ import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.format.DateTimeParseException;
-import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 
@@ -32,7 +32,6 @@ public class AnalyticsSpongeService {
     private final GeoService geoService;
     private final UserAgentService userAgentService;
 
-    private static final String ANALYTICS_STREAM_KEY = "analytics:events";
     private static final String CONSUMER_GROUP = "analytics-group";
     private static final String CONSUMER_NAME = "analytics-sponge-1";
 
@@ -47,7 +46,7 @@ public class AnalyticsSpongeService {
         try {
             // Create consumer group if not present
             // Reading from '0-0' ensures we process all history if we start fresh
-            redisTemplate.opsForStream().createGroup(ANALYTICS_STREAM_KEY, ReadOffset.from("0-0"), CONSUMER_GROUP);
+            redisTemplate.opsForStream().createGroup(ClickEventStreamFields.STREAM_KEY, ReadOffset.from("0-0"), CONSUMER_GROUP);
             log.info("Successfully created Redis consumer group.");
         } catch (RedisSystemException e) {
             if (e.getRootCause() instanceof RedisCommandExecutionException && 
@@ -71,13 +70,13 @@ public class AnalyticsSpongeService {
             List<MapRecord<String, Object, Object>> messages = redisTemplate.opsForStream().read(
                 Consumer.from(CONSUMER_GROUP, CONSUMER_NAME),
                 StreamReadOptions.empty().count(100).block(Duration.ofMillis(100)),
-                StreamOffset.create(ANALYTICS_STREAM_KEY, ReadOffset.lastConsumed())
+                StreamOffset.create(ClickEventStreamFields.STREAM_KEY, ReadOffset.lastConsumed())
             );
 
             if (messages != null && !messages.isEmpty()) {
                 for (MapRecord<String, Object, Object> message : messages) {
                     processEvent(message);
-                    redisTemplate.opsForStream().acknowledge(ANALYTICS_STREAM_KEY, CONSUMER_GROUP, message.getId());
+                    redisTemplate.opsForStream().acknowledge(ClickEventStreamFields.STREAM_KEY, CONSUMER_GROUP, message.getId());
                 }
                 log.info("Sponged {} events", messages.size());
             }
@@ -92,11 +91,13 @@ public class AnalyticsSpongeService {
     private void processEvent(MapRecord<String, Object, Object> message) {
         Map<Object, Object> body = message.getValue();
         
-        String shortCode = (String) body.get("shortCode");
-        String ip = (String) body.get("ip");
-        String ua = (String) body.get("ua");
-        String ref = (String) body.get("ref");
-        String timestampStr = (String) body.get("timestamp");
+        String shortCode = stringField(body, ClickEventStreamFields.SHORT_CODE);
+        String ip = stringField(body, ClickEventStreamFields.IP);
+        String ua = stringField(body, ClickEventStreamFields.UA);
+        String ref = stringField(body, ClickEventStreamFields.REF);
+        String timestampStr = stringField(body, ClickEventStreamFields.TIMESTAMP);
+        Long userId = parseLongField(body, ClickEventStreamFields.USER_ID);
+        Long linkId = parseLongField(body, ClickEventStreamFields.LINK_ID);
 
         // Parse User Agent
         ua_parser.Client client = userAgentService.parse(ua);
@@ -109,6 +110,8 @@ public class AnalyticsSpongeService {
         String city = geoService.getCity(ip);
 
         LinkAnalytics analytics = LinkAnalytics.builder()
+                .userId(userId)
+                .linkId(linkId)
                 .shortCode(shortCode)
                 .ipAddress(ip)
                 .userAgent(ua)
@@ -122,6 +125,23 @@ public class AnalyticsSpongeService {
                 .build();
 
         analyticsRepository.save(analytics);
+    }
+
+    private static String stringField(Map<Object, Object> body, String key) {
+        Object v = body.get(key);
+        return v != null ? v.toString() : null;
+    }
+
+    private static Long parseLongField(Map<Object, Object> body, String key) {
+        String s = stringField(body, key);
+        if (s == null || s.isBlank()) {
+            return null;
+        }
+        try {
+            return Long.parseLong(s);
+        } catch (NumberFormatException e) {
+            return null;
+        }
     }
 
     private LocalDateTime parseTimestamp(String timestampStr) {

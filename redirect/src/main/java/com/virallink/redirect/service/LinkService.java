@@ -14,6 +14,7 @@ import com.virallink.redirect.repository.LinkRepository;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.time.Duration;
+import java.util.Map;
 import java.util.Optional;
 
 @Service
@@ -28,7 +29,10 @@ public class LinkService {
     @Autowired
     private Hashids hashids;
 
+    /** Legacy: plain string value (long URL only). Migrated to {@link #REDIS_LINK_HASH_PREFIX} on read. */
     private static final String REDIS_PREFIX = "link:";
+    /** Hash: url, linkId, userId — avoids extra DB hits on the redirect hot path. */
+    private static final String REDIS_LINK_HASH_PREFIX = "link:cache:";
     private static final Duration CACHE_TTL = Duration.ofMinutes(10); // Hot Path TTL
 
     /**
@@ -54,8 +58,7 @@ public class LinkService {
         // Update DB
         linkRepository.save(link);
         
-        // Hydrate Redis
-        redisTemplate.opsForValue().set(REDIS_PREFIX + shortCode, originalUrl, CACHE_TTL);
+        cacheLinkHash(link.getShortCode(), link);
         log.info("Created link: {} -> {}", shortCode, originalUrl);
         
         return link;
@@ -68,30 +71,76 @@ public class LinkService {
      * 3. Hydrate Redis if found in DB.
      */
     public Optional<String> resolveLink(String shortCode, String ipAddress, String userAgent, String referer) {
-        // Fire and forget analytics -> To Redis Stream/Counter
-        analyticsService.trackClick(shortCode, ipAddress, userAgent, referer);
+        String legacyKey = REDIS_PREFIX + shortCode;
 
-        String cacheKey = REDIS_PREFIX + shortCode;
-        
-        // L1 Cache check
-        String cachedUrl = redisTemplate.opsForValue().get(cacheKey);
-        if (cachedUrl != null) {
-            log.debug("Cache Hit: {}", shortCode);
-            return Optional.of(cachedUrl);
+        Optional<Link> fromHash = readLinkFromHash(shortCode);
+        if (fromHash.isPresent()) {
+            Link link = fromHash.get();
+            log.debug("Cache Hit (hash): {}", shortCode);
+            analyticsService.trackClick(shortCode, link.getId(), link.getUserId(), ipAddress, userAgent, referer);
+            return Optional.of(link.getLongUrl());
         }
 
-        // L2 DB check
+        String legacyUrl = redisTemplate.opsForValue().get(legacyKey);
+        if (legacyUrl != null) {
+            redisTemplate.delete(legacyKey);
+            Optional<Link> linkOpt = linkRepository.findByShortCode(shortCode);
+            if (linkOpt.isEmpty()) {
+                return Optional.empty();
+            }
+            Link link = linkOpt.get();
+            cacheLinkHash(shortCode, link);
+            analyticsService.trackClick(shortCode, link.getId(), link.getUserId(), ipAddress, userAgent, referer);
+            return Optional.of(link.getLongUrl());
+        }
+
         log.debug("Cache Miss: {}", shortCode);
         Optional<Link> linkOpt = linkRepository.findByShortCode(shortCode);
-        
         if (linkOpt.isPresent()) {
-            String longUrl = linkOpt.get().getLongUrl();
-            // Async Hydration (Wait, synchronous for now to ensure availability for next hit)
-            redisTemplate.opsForValue().set(cacheKey, longUrl, CACHE_TTL);
-            return Optional.of(longUrl);
+            Link link = linkOpt.get();
+            cacheLinkHash(shortCode, link);
+            analyticsService.trackClick(shortCode, link.getId(), link.getUserId(), ipAddress, userAgent, referer);
+            return Optional.of(link.getLongUrl());
         }
-        
+
         return Optional.empty();
+    }
+
+    private Optional<Link> readLinkFromHash(String shortCode) {
+        String hashKey = REDIS_LINK_HASH_PREFIX + shortCode;
+        if (!Boolean.TRUE.equals(redisTemplate.hasKey(hashKey))) {
+            return Optional.empty();
+        }
+        Map<Object, Object> entries = redisTemplate.opsForHash().entries(hashKey);
+        if (entries == null || entries.isEmpty()) {
+            return Optional.empty();
+        }
+        Object urlObj = entries.get("url");
+        Object linkIdObj = entries.get("linkId");
+        Object userIdObj = entries.get("userId");
+        if (urlObj == null || linkIdObj == null || userIdObj == null) {
+            return Optional.empty();
+        }
+        try {
+            Link synthetic = Link.builder()
+                    .id(Long.parseLong(linkIdObj.toString()))
+                    .userId(Long.parseLong(userIdObj.toString()))
+                    .longUrl(urlObj.toString())
+                    .shortCode(shortCode)
+                    .build();
+            return Optional.of(synthetic);
+        } catch (NumberFormatException e) {
+            log.warn("Invalid link cache hash at {}: {}", hashKey, e.getMessage());
+            return Optional.empty();
+        }
+    }
+
+    private void cacheLinkHash(String shortCode, Link link) {
+        String hashKey = REDIS_LINK_HASH_PREFIX + shortCode;
+        redisTemplate.opsForHash().put(hashKey, "url", link.getLongUrl());
+        redisTemplate.opsForHash().put(hashKey, "linkId", Long.toString(link.getId()));
+        redisTemplate.opsForHash().put(hashKey, "userId", Long.toString(link.getUserId()));
+        redisTemplate.expire(hashKey, CACHE_TTL);
     }
 
     public java.util.List<Link> getLinksByUserId(Long userId) {
@@ -113,7 +162,9 @@ public class LinkService {
         Optional<Link> link = linkRepository.findByIdAndUserId(id, userId);
         if (link.isPresent()) {
             Link l = link.get();
-            redisTemplate.delete(REDIS_PREFIX + l.getShortCode());
+            String code = l.getShortCode();
+            redisTemplate.delete(REDIS_PREFIX + code);
+            redisTemplate.delete(REDIS_LINK_HASH_PREFIX + code);
             linkRepository.delete(l);
         }
     }

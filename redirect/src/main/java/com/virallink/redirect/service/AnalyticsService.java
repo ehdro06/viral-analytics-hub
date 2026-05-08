@@ -1,5 +1,6 @@
 package com.virallink.redirect.service;
 
+import com.virallink.redirect.events.ClickEventStreamFields;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.redis.core.StringRedisTemplate;
@@ -17,11 +18,10 @@ public class AnalyticsService {
 
     private final StringRedisTemplate redisTemplate;
 
-    private static final String ANALYTICS_STREAM_KEY = "analytics:events";
     private static final String STATS_KEY_PREFIX = "stats:link:";
 
     @Async
-    public void trackClick(String shortCode, String ipAddress, String userAgent, String referer) {
+    public void trackClick(String shortCode, long linkId, long userId, String ipAddress, String userAgent, String referer) {
         // Anonymize IP (GDPR Compliance - mask last octet)
         String anonymizedIp = anonymizeIp(ipAddress);
 
@@ -32,13 +32,15 @@ public class AnalyticsService {
 
             // 2. Push detailed event to Redis Stream (for future async processing/flushing to DB)
             Map<String, String> eventData = new HashMap<>();
-            eventData.put("shortCode", shortCode);
-            eventData.put("ip", anonymizedIp); // Store anonymized IP
-            eventData.put("ua", userAgent != null ? userAgent : "unknown");
-            eventData.put("ref", referer != null ? referer : "direct");
-            eventData.put("timestamp", Instant.now().toString());
+            eventData.put(ClickEventStreamFields.USER_ID, Long.toString(userId));
+            eventData.put(ClickEventStreamFields.LINK_ID, Long.toString(linkId));
+            eventData.put(ClickEventStreamFields.SHORT_CODE, shortCode);
+            eventData.put(ClickEventStreamFields.IP, anonymizedIp); // Store anonymized IP
+            eventData.put(ClickEventStreamFields.UA, userAgent != null ? userAgent : "unknown");
+            eventData.put(ClickEventStreamFields.REF, referer != null ? referer : "direct");
+            eventData.put(ClickEventStreamFields.TIMESTAMP, Instant.now().toString());
 
-            redisTemplate.opsForStream().add(ANALYTICS_STREAM_KEY, eventData);
+            redisTemplate.opsForStream().add(ClickEventStreamFields.STREAM_KEY, eventData);
             
             log.debug("Tracked click for {}", shortCode);
         } catch (Exception e) {

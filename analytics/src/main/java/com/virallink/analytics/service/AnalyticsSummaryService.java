@@ -7,7 +7,6 @@ import org.springframework.stereotype.Service;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
-import java.time.LocalTime;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -17,26 +16,26 @@ public class AnalyticsSummaryService {
 
     private final LinkAnalyticsRepository repo;
 
-    public AnalyticsSummaryResponse getSummary() {
+    public AnalyticsSummaryResponse getSummary(Long userId) {
         LocalDateTime startOfToday = LocalDate.now().atStartOfDay();
         LocalDateTime startOfWeek = LocalDateTime.now().minusDays(7);
         LocalDateTime startOf30Days = LocalDateTime.now().minusDays(30);
 
-        long totalClicks = repo.count();
-        long clicksToday = repo.countByClickedAtAfter(startOfToday);
-        long clicksThisWeek = repo.countByClickedAtAfter(startOfWeek);
-        long uniqueVisitors = repo.countDistinctIpSince(startOfWeek);
+        long totalClicks = repo.countByUserId(userId);
+        long clicksToday = repo.countByUserIdAndClickedAtAfter(userId, startOfToday);
+        long clicksThisWeek = repo.countByUserIdAndClickedAtAfter(userId, startOfWeek);
+        long uniqueVisitors = repo.countDistinctIpSince(userId, startOfWeek);
 
-        long clicksLast30 = repo.countByClickedAtAfter(startOf30Days);
-        long avgClicksPerDay = clicksLast30 / 30;
+        long clicksLast30 = repo.countByUserIdAndClickedAtAfter(userId, startOf30Days);
+        long avgClicksPerDay = clicksLast30 == 0 ? 0 : clicksLast30 / 30;
 
-        long peakClicksPerMinute = repo.peakPerMinuteLastDay();
+        long peakClicksPerMinute = repo.peakPerMinuteLastDay(userId);
 
-        var geoData = repo.topCountries().stream()
+        var geoData = repo.topCountries(userId).stream()
                 .map(g -> new AnalyticsSummaryResponse.GeoData(g.getCountry(), g.getCountry(), g.getCount()))
                 .collect(Collectors.toList());
 
-        var referrersRaw = repo.topReferrers();
+        var referrersRaw = repo.topReferrers(userId);
         long refTotal = referrersRaw.stream().mapToLong(r -> r.getCount()).sum();
         var referrers = referrersRaw.stream()
                 .map(r -> new AnalyticsSummaryResponse.ReferrerData(
@@ -46,7 +45,7 @@ public class AnalyticsSummaryService {
                 ))
                 .collect(Collectors.toList());
 
-        var timeSeries = repo.hourlyLast48h().stream()
+        var timeSeries = repo.hourlyLast48h(userId).stream()
                 .map(t -> new AnalyticsSummaryResponse.TimeSeriesPoint(t.getBucket(), t.getCount()))
                 .collect(Collectors.toList());
 

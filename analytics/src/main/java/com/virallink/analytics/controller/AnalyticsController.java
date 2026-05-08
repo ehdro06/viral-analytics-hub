@@ -3,6 +3,7 @@ package com.virallink.analytics.controller;
 import com.virallink.analytics.dto.AnalyticsSummaryResponse;
 import com.virallink.analytics.service.AnalyticsSummaryService;
 import lombok.RequiredArgsConstructor;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -15,7 +16,8 @@ public class AnalyticsController {
     private final AnalyticsSummaryService summaryService;
 
     @GetMapping("/summary")
-    public AnalyticsSummaryResponse summary() {
-        return summaryService.getSummary();
+    public AnalyticsSummaryResponse summary(Authentication authentication) {
+        Long userId = (Long) authentication.getPrincipal();
+        return summaryService.getSummary(userId);
     }
 }

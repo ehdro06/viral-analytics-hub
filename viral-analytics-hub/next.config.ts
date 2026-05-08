@@ -1,6 +1,8 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  /** Trace prod deps into `.next/standalone` for minimal Docker/runtime copies (see Next.js “Standalone”). */
+  output: "standalone",
   async rewrites() {
     return [
       // Expander Service (Public Utility)

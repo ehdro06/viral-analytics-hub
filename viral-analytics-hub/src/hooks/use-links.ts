@@ -1,9 +1,8 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuthStore } from "./use-auth-store";
-import { LinkItem } from "./use-mock-data"; 
-// Start reusing existing types, but note backend differences
+import type { LinkItem } from "@/types/virallink";
 
-// Extended Interface matching backend
+// Backend contract for list/create responses
 interface BackendLink {
     id: number;
     shortCode: string;

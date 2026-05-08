@@ -1,4 +1,4 @@
-import { ReferrerData } from "@/hooks/use-mock-data";
+import type { ReferrerData } from "@/types/virallink";
 import { motion } from "framer-motion";
 
 interface ReferrerBreakdownProps {

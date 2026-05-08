@@ -12,10 +12,14 @@ import RealTimeTicker from "@/components/RealTimeTicker";
 import TimeSeriesChart from "@/components/TimeSeriesChart";
 import ReferrerBreakdown from "@/components/ReferrerBreakdown";
 import GeoBreakdown from "@/components/GeoBreakdown";
-import { useMockData } from "@/hooks/use-mock-data";
+import { useAnalyticsSummary } from "@/hooks/use-analytics-summary";
+import { usePollClicksPerSecond } from "@/hooks/use-poll-clicks-per-second";
 
 export default function DashboardPage() {
-  const { analytics, realtimeClicks } = useMockData();
+  const { data: analytics, isPending } = useAnalyticsSummary();
+  const liveClicksPerSec = usePollClicksPerSecond(analytics?.totalClicks);
+
+  const empty = isPending || !analytics;
 
   return (
     <DashboardLayout>
@@ -27,48 +31,43 @@ export default function DashboardPage() {
           </p>
         </div>
 
-        {/* Stats Grid */}
         <div className="grid grid-cols-2 lg:grid-cols-5 gap-3 lg:gap-4">
           <div className="col-span-2 lg:col-span-1">
-            <RealTimeTicker clicksPerSecond={realtimeClicks} />
+            <RealTimeTicker clicksPerSecond={empty ? 0 : liveClicksPerSec} />
           </div>
           <StatsCard
             label="Total Clicks"
-            value={analytics.totalClicks}
+            value={empty ? "—" : analytics.totalClicks}
             icon={MousePointerClick}
-            trend={{ value: 12.4, positive: true }}
             variant="primary"
             delay={0.05}
           />
           <StatsCard
             label="Today"
-            value={analytics.clicksToday}
+            value={empty ? "—" : analytics.clicksToday}
             icon={TrendingUp}
-            trend={{ value: 8.2, positive: true }}
             delay={0.1}
           />
           <StatsCard
             label="Unique Visitors"
-            value={analytics.uniqueVisitors}
+            value={empty ? "—" : analytics.uniqueVisitors}
             icon={Users}
-            trend={{ value: 5.7, positive: true }}
             delay={0.15}
           />
           <StatsCard
             label="Peak /min"
-            value={analytics.peakClicksPerMinute}
+            value={empty ? "—" : analytics.peakClicksPerMinute}
             icon={Flame}
             variant="viral"
             delay={0.2}
           />
         </div>
 
-        {/* Charts */}
-        <TimeSeriesChart data={analytics.timeSeries} />
+        <TimeSeriesChart data={analytics?.timeSeries ?? []} />
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-          <ReferrerBreakdown data={analytics.referrers} />
-          <GeoBreakdown data={analytics.geoData} />
+          <ReferrerBreakdown data={analytics?.referrers ?? []} />
+          <GeoBreakdown data={analytics?.geoData ?? []} />
         </div>
       </div>
     </DashboardLayout>

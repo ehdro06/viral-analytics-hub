@@ -1,2 +1,3 @@
-# Copy to gradle.properties and set your JDK 25 install root (parent of bin/).
-# org.gradle.java.home=C:\\Program Files\\Java\\jdk-25
+# Copy to gradle.properties. Use JDK root (parent of bin/). Prefer forward slashes on Windows.
+# org.gradle.java.home=C:/Program Files/Java/jdk-25
+# org.gradle.java.installations.paths=C:/Program Files/Java/jdk-25

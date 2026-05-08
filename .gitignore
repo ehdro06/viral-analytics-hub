@@ -17,3 +17,8 @@ Desktop.ini
 # Temp
 tmp/
 temp/
+
+# Local JDK path (optional; set org.gradle.java.home for Gradle toolchains)
+user/gradle.properties
+redirect/gradle.properties
+analytics/gradle.properties

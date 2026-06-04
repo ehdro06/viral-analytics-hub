@@ -1,5 +1,7 @@
 # Local development
 
+Overview and architecture: [README](../README.md). Contribution guidelines: [CONTRIBUTING](../CONTRIBUTING.md).
+
 ## Infrastructure
 
 ```bash

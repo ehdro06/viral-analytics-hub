@@ -1,6 +1,6 @@
 # Local development
 
-Overview and architecture: [README](../README.md). Contribution guidelines: [CONTRIBUTING](../CONTRIBUTING.md).
+Overview and architecture: [README](../README.md). Contribution guidelines: [CONTRIBUTING](../CONTRIBUTING.md). Agent handover: [HANDOVER.md](./HANDOVER.md).
 
 ## Infrastructure
 

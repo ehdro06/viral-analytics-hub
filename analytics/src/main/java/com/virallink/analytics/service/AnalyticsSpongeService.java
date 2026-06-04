@@ -3,24 +3,32 @@ package com.virallink.analytics.service;
 import com.virallink.analytics.events.ClickEventStreamFields;
 import com.virallink.analytics.model.LinkAnalytics;
 import com.virallink.analytics.repository.LinkAnalyticsRepository;
+import io.lettuce.core.RedisCommandExecutionException;
 import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.data.redis.connection.stream.*;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.data.redis.RedisSystemException;
+import org.springframework.data.redis.connection.stream.Consumer;
+import org.springframework.data.redis.connection.stream.MapRecord;
+import org.springframework.data.redis.connection.stream.ReadOffset;
+import org.springframework.data.redis.connection.stream.RecordId;
+import org.springframework.data.redis.connection.stream.StreamOffset;
+import org.springframework.data.redis.connection.stream.StreamReadOptions;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.format.DateTimeParseException;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
-
-import org.springframework.data.redis.RedisSystemException;
-import io.lettuce.core.RedisCommandExecutionException;
+import java.util.Optional;
 
 @Service
 @RequiredArgsConstructor
@@ -35,6 +43,12 @@ public class AnalyticsSpongeService {
     private static final String CONSUMER_GROUP = "analytics-group";
     private static final String CONSUMER_NAME = "analytics-sponge-1";
 
+    @Value("${analytics.sponge.batch-size:100}")
+    private int batchSize;
+
+    @Value("${analytics.sponge.read-block-ms:100}")
+    private long readBlockMs;
+
     private volatile Instant lastRunTime;
 
     public Instant getLastRunTime() {
@@ -44,14 +58,17 @@ public class AnalyticsSpongeService {
     @PostConstruct
     public void init() {
         try {
-            // Create consumer group if not present
-            // Reading from '0-0' ensures we process all history if we start fresh
-            redisTemplate.opsForStream().createGroup(ClickEventStreamFields.STREAM_KEY, ReadOffset.from("0-0"), CONSUMER_GROUP);
-            log.info("Successfully created Redis consumer group.");
+            redisTemplate.opsForStream().createGroup(
+                    ClickEventStreamFields.STREAM_KEY,
+                    ReadOffset.from("0-0"),
+                    CONSUMER_GROUP
+            );
+            log.info("Created Redis consumer group '{}' on stream '{}'.", CONSUMER_GROUP, ClickEventStreamFields.STREAM_KEY);
         } catch (RedisSystemException e) {
-            if (e.getRootCause() instanceof RedisCommandExecutionException && 
-                e.getRootCause().getMessage().contains("BUSYGROUP")) {
-                log.info("Redis consumer group '{}' already exists. Resuming consumption.", CONSUMER_GROUP);
+            if (e.getRootCause() instanceof RedisCommandExecutionException root
+                    && root.getMessage() != null
+                    && root.getMessage().contains("BUSYGROUP")) {
+                log.info("Consumer group '{}' already exists on stream '{}'.", CONSUMER_GROUP, ClickEventStreamFields.STREAM_KEY);
             } else {
                 log.error("Failed to initialize consumer group", e);
             }
@@ -60,38 +77,74 @@ public class AnalyticsSpongeService {
         }
     }
 
-    // Run every 1 second
-    @Scheduled(fixedDelay = 1000)
+    @Scheduled(fixedDelayString = "${analytics.sponge.poll-interval-ms:1000}")
+    @Transactional
     public void spongeEvents() {
         lastRunTime = Instant.now();
         try {
-            // StringRedisTemplate typed read
-            // StreamOperations<String, String, String>
             List<MapRecord<String, Object, Object>> messages = redisTemplate.opsForStream().read(
-                Consumer.from(CONSUMER_GROUP, CONSUMER_NAME),
-                StreamReadOptions.empty().count(100).block(Duration.ofMillis(100)),
-                StreamOffset.create(ClickEventStreamFields.STREAM_KEY, ReadOffset.lastConsumed())
+                    Consumer.from(CONSUMER_GROUP, CONSUMER_NAME),
+                    StreamReadOptions.empty().count(batchSize).block(Duration.ofMillis(readBlockMs)),
+                    StreamOffset.create(ClickEventStreamFields.STREAM_KEY, ReadOffset.lastConsumed())
             );
 
-            if (messages != null && !messages.isEmpty()) {
-                for (MapRecord<String, Object, Object> message : messages) {
-                    processEvent(message);
-                    redisTemplate.opsForStream().acknowledge(ClickEventStreamFields.STREAM_KEY, CONSUMER_GROUP, message.getId());
+            if (messages == null || messages.isEmpty()) {
+                return;
+            }
+
+            List<LinkAnalytics> toPersist = new ArrayList<>(messages.size());
+            List<RecordId> persistAckIds = new ArrayList<>(messages.size());
+            int skipped = 0;
+
+            for (MapRecord<String, Object, Object> message : messages) {
+                Optional<LinkAnalytics> mapped = mapEvent(message.getValue());
+                if (mapped.isEmpty()) {
+                    acknowledge(message.getId());
+                    skipped++;
+                    log.warn("Acknowledged invalid click event {} (missing shortCode)", message.getId());
+                    continue;
                 }
-                log.info("Sponged {} events", messages.size());
+                toPersist.add(mapped.get());
+                persistAckIds.add(message.getId());
+            }
+
+            if (!toPersist.isEmpty()) {
+                analyticsRepository.saveAll(toPersist);
+                acknowledgeAll(persistAckIds);
+                log.info("Sponged {} events (skipped {})", toPersist.size(), skipped);
+            } else if (skipped > 0) {
+                log.debug("Batch contained only invalid events (skipped {})", skipped);
             }
         } catch (Exception e) {
-             // Handle "no such key" gracefully if stream is empty/not created yet
-             if (e.getMessage() != null && !e.getMessage().contains("ERR no such key")) {
-                log.error("Error sponging analytics events: {}", e.getMessage());
-             }
+            if (e.getMessage() != null && e.getMessage().contains("ERR no such key")) {
+                return;
+            }
+            log.error("Error sponging analytics events (batch not acknowledged): {}", e.getMessage(), e);
+            throw e instanceof RuntimeException re ? re : new RuntimeException(e);
         }
     }
 
-    private void processEvent(MapRecord<String, Object, Object> message) {
-        Map<Object, Object> body = message.getValue();
-        
+    private void acknowledge(RecordId id) {
+        redisTemplate.opsForStream().acknowledge(ClickEventStreamFields.STREAM_KEY, CONSUMER_GROUP, id);
+    }
+
+    private void acknowledgeAll(List<RecordId> ids) {
+        if (ids.isEmpty()) {
+            return;
+        }
+        redisTemplate.opsForStream().acknowledge(
+                ClickEventStreamFields.STREAM_KEY,
+                CONSUMER_GROUP,
+                ids.toArray(RecordId[]::new)
+        );
+    }
+
+    private Optional<LinkAnalytics> mapEvent(Map<Object, Object> body) {
         String shortCode = stringField(body, ClickEventStreamFields.SHORT_CODE);
+        if (shortCode == null || shortCode.isBlank()) {
+            return Optional.empty();
+        }
+
         String ip = stringField(body, ClickEventStreamFields.IP);
         String ua = stringField(body, ClickEventStreamFields.UA);
         String ref = stringField(body, ClickEventStreamFields.REF);
@@ -99,17 +152,15 @@ public class AnalyticsSpongeService {
         Long userId = parseLongField(body, ClickEventStreamFields.USER_ID);
         Long linkId = parseLongField(body, ClickEventStreamFields.LINK_ID);
 
-        // Parse User Agent
         ua_parser.Client client = userAgentService.parse(ua);
         String browser = (client != null && client.userAgent != null) ? client.userAgent.family : "Unknown";
         String os = (client != null && client.os != null) ? client.os.family : "Unknown";
         String device = (client != null && client.device != null) ? client.device.family : "Unknown";
 
-        // Geo IP
         String country = geoService.getCountry(ip);
         String city = geoService.getCity(ip);
 
-        LinkAnalytics analytics = LinkAnalytics.builder()
+        return Optional.of(LinkAnalytics.builder()
                 .userId(userId)
                 .linkId(linkId)
                 .shortCode(shortCode)
@@ -122,9 +173,7 @@ public class AnalyticsSpongeService {
                 .deviceType(device)
                 .country(country)
                 .city(city)
-                .build();
-
-        analyticsRepository.save(analytics);
+                .build());
     }
 
     private static String stringField(Map<Object, Object> body, String key) {
@@ -145,7 +194,9 @@ public class AnalyticsSpongeService {
     }
 
     private LocalDateTime parseTimestamp(String timestampStr) {
-        if (timestampStr == null) return LocalDateTime.now();
+        if (timestampStr == null) {
+            return LocalDateTime.now();
+        }
         try {
             return LocalDateTime.ofInstant(Instant.parse(timestampStr), ZoneId.systemDefault());
         } catch (DateTimeParseException e) {

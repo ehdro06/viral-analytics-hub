@@ -73,6 +73,8 @@ cd viral-analytics-hub && pnpm install && pnpm run dev
 
 Full steps, env table, and smoke test: **[docs/LOCAL_DEV.md](docs/LOCAL_DEV.md)**.
 
+Agent handover (what’s done, what’s next): **[docs/HANDOVER.md](docs/HANDOVER.md)**.
+
 Click stream contract: **[docs/click-events-stream.md](docs/click-events-stream.md)**.
 
 ## Repository layout

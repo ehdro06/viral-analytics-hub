@@ -54,21 +54,21 @@ function NavItem({ path, label, icon: Icon, active, onClick }: {
 
 export default function DashboardLayout({ children }: { children: ReactNode }) {
   const [mobileOpen, setMobileOpen] = useState(false);
-  const { user, isLoading, logout } = useUser();
+  const { user, isLoading, logout, isAuthenticated } = useUser();
   const router = useRouter();
-  const pathname = usePathname(); // Missing hook call added
+  const pathname = usePathname();
 
   useEffect(() => {
-    if (!isLoading && !user) {
+    if (!isLoading && !isAuthenticated) {
       router.push("/login");
     }
-  }, [user, isLoading, router]);
+  }, [isAuthenticated, isLoading, router]);
 
   if (isLoading) {
     return <div className="flex h-screen items-center justify-center">Loading...</div>;
   }
 
-  if (!user) return null; // Or return a splash screen/loader while redirecting
+  if (!isAuthenticated || !user) return null;
 
   return (
     <div className="flex h-screen overflow-hidden bg-background">

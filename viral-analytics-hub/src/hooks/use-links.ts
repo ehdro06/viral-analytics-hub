@@ -1,5 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuthStore } from "./use-auth-store";
+import { authFetch } from "@/lib/auth-fetch";
 import type { LinkItem } from "@/types/virallink";
 
 // Backend contract for list/create responses
@@ -31,9 +32,7 @@ export function useLinks() {
         queryKey: ["links"],
         queryFn: async () => {
              if (!token) return [];
-             const res = await fetch("/api/v1/links", {
-                 headers: { Authorization: `Bearer ${token}` }
-             });
+             const res = await authFetch("/api/v1/links");
              if (!res.ok) throw new Error("Failed to fetch links");
              const data: BackendLink[] = await res.json();
              return data.map(mapBackendToFrontend);
@@ -47,12 +46,9 @@ export function useLinks() {
     // Create Link (with Optimistic Update)
     const createMutation = useMutation({
         mutationFn: async (originalUrl: string) => {
-            const res = await fetch("/api/v1/links", {
+            const res = await authFetch("/api/v1/links", {
                 method: "POST",
-                headers: { 
-                    "Content-Type": "application/json",
-                    Authorization: `Bearer ${token}` 
-                },
+                headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ longUrl: originalUrl }),
             });
             if (!res.ok) throw new Error("Failed to create link");
@@ -91,10 +87,7 @@ export function useLinks() {
     // Delete Link (with Optimistic Update)
     const deleteMutation = useMutation({
         mutationFn: async (id: string) => {
-            const res = await fetch(`/api/v1/links/${id}`, {
-                method: "DELETE",
-                headers: { Authorization: `Bearer ${token}` }
-            });
+            const res = await authFetch(`/api/v1/links/${id}`, { method: "DELETE" });
             if (!res.ok) throw new Error("Failed to delete link");
         },
         onMutate: async (deletedId) => {

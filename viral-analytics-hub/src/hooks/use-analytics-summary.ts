@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { useAuthStore } from "./use-auth-store";
+import { authFetch } from "@/lib/auth-fetch";
 import type { AnalyticsData, GeoDataPoint, ReferrerData, TimeSeriesPoint } from "@/types/virallink";
 
 const EMPTY: AnalyticsData = {
@@ -25,9 +26,7 @@ export function useAnalyticsSummary() {
     refetchIntervalInBackground: false,
     refetchOnWindowFocus: true,
     queryFn: async (): Promise<AnalyticsData> => {
-      const res = await fetch("/api/v1/analytics/summary", {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      const res = await authFetch("/api/v1/analytics/summary");
       if (!res.ok) {
         throw new Error("Failed to fetch analytics summary");
       }

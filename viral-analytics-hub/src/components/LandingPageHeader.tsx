@@ -3,10 +3,11 @@
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { LayoutDashboard, LogIn, Sparkles } from 'lucide-react';
-import { useUser } from '@/hooks/use-user';
+import { useAuthStore } from '@/hooks/use-auth-store';
 
 export function LandingPageHeader() {
-  const { user, isLoading } = useUser();
+  const { isAuthenticated, isHydrated } = useAuthStore();
+  const isLoading = !isHydrated;
 
   return (
     <header className="border-b border-slate-800 sticky top-0 bg-[#0A0A0A]/80 backdrop-blur-md z-50">
@@ -18,7 +19,7 @@ export function LandingPageHeader() {
         </div>
 
         <nav className="flex items-center gap-4">
-          {!isLoading && user ? (
+          {!isLoading && isAuthenticated ? (
             <Link href="/dashboard">
               <Button size="sm" className="gap-2 bg-slate-800 hover:bg-slate-700 text-slate-100 border-slate-700">
                 <LayoutDashboard className="h-4 w-4" />

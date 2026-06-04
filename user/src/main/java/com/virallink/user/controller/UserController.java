@@ -1,15 +1,15 @@
 package com.virallink.user.controller;
 
+import com.virallink.user.model.ApiKey;
 import com.virallink.user.model.User;
 import com.virallink.user.service.UserService;
 import com.virallink.user.service.JwtService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
-import org.springframework.security.oauth2.client.authentication.OAuth2AuthenticationToken;
-import org.springframework.security.oauth2.core.user.OAuth2User;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.List;
 import java.util.Map;
 
 @RestController
@@ -22,51 +22,51 @@ public class UserController {
 
     public record UserResponse(Long id, String email, String name, String token) {}
 
+    public record ApiKeyResponse(Long id, String prefix, String createdAt) {}
+
     @GetMapping("/me")
-    public ResponseEntity<UserResponse> getCurrentUser(@AuthenticationPrincipal OAuth2User principal, 
-                                               OAuth2AuthenticationToken token) {
-        if (principal == null) {
+    public ResponseEntity<UserResponse> getCurrentUser(@AuthenticationPrincipal Long userId) {
+        if (userId == null) {
             return ResponseEntity.status(401).build();
         }
-        
-        // Identify user from DB
-        User user = resolveUser(token, principal);
-        
-        // Generate Token
+
+        User user = userService.getUserById(userId);
         String jwtToken = jwtService.generateToken(Map.of("userId", user.getId()), user.getEmail());
-        
+
         return ResponseEntity.ok(new UserResponse(user.getId(), user.getEmail(), user.getName(), jwtToken));
     }
 
+    @GetMapping("/keys")
+    public ResponseEntity<List<ApiKeyResponse>> listApiKeys(@AuthenticationPrincipal Long userId) {
+        if (userId == null) {
+            return ResponseEntity.status(401).build();
+        }
+
+        User user = userService.getUserById(userId);
+        List<ApiKeyResponse> keys = userService.getApiKeys(user).stream()
+                .map(this::toApiKeyResponse)
+                .toList();
+
+        return ResponseEntity.ok(keys);
+    }
+
     @PostMapping("/keys")
-    public ResponseEntity<Map<String, String>> generateApiKey(@AuthenticationPrincipal OAuth2User principal,
-                                                              OAuth2AuthenticationToken token) {
-        User user = resolveUser(token, principal);
+    public ResponseEntity<Map<String, String>> generateApiKey(@AuthenticationPrincipal Long userId) {
+        if (userId == null) {
+            return ResponseEntity.status(401).build();
+        }
+
+        User user = userService.getUserById(userId);
         String rawKey = userService.createApiKey(user);
-        
+
         return ResponseEntity.ok(Map.of(
             "key", rawKey,
             "message", "Store this key safely. You won't be able to see it again."
         ));
     }
 
-    private User resolveUser(OAuth2AuthenticationToken token, OAuth2User principal) {
-        String registrationId = token.getAuthorizedClientRegistrationId();
-        String providerId = principal.getName();
-        
-        // GitHub uses 'id' (Integer) as name in DefaultOAuth2User sometimes, but let's check attributes
-        // My CustomOAuth2UserService handled the registration/update.
-        // I need to start fetching consistently.
-        
-        if ("github".equals(registrationId)) {
-             Object idObj = principal.getAttribute("id");
-             if (idObj instanceof Integer) {
-                 providerId = String.valueOf(idObj);
-             }
-        } else if ("google".equals(registrationId)) {
-            providerId = principal.getAttribute("sub");
-        }
-
-        return userService.getUserByProviderId(registrationId, providerId);
+    private ApiKeyResponse toApiKeyResponse(ApiKey apiKey) {
+        String createdAt = apiKey.getCreatedAt() != null ? apiKey.getCreatedAt().toString() : null;
+        return new ApiKeyResponse(apiKey.getId(), apiKey.getPrefix(), createdAt);
     }
 }

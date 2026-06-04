@@ -11,6 +11,7 @@ public final class ClickEventStreamFields {
 
     private ClickEventStreamFields() {}
 
+    /** See {@code docs/click-events-stream.md}. */
     public static final String STREAM_KEY = "analytics:events";
 
     public static final String USER_ID = "userId";

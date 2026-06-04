@@ -18,6 +18,10 @@ Desktop.ini
 tmp/
 temp/
 
+# Local secrets
+.env
+.env.local
+
 # Local JDK path (optional; set org.gradle.java.home for Gradle toolchains)
 user/gradle.properties
 redirect/gradle.properties

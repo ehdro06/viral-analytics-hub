@@ -6,6 +6,8 @@ import com.virallink.user.repository.ApiKeyRepository;
 import com.virallink.user.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.security.oauth2.client.authentication.OAuth2AuthenticationToken;
+import org.springframework.security.oauth2.core.user.OAuth2User;
 import org.springframework.security.crypto.keygen.Base64StringKeyGenerator;
 import org.springframework.security.crypto.keygen.StringKeyGenerator;
 import org.springframework.stereotype.Service;
@@ -33,9 +35,30 @@ public class UserService {
     // 16 bytes = 128 bits entropy for key identifier
     private final StringKeyGenerator keyGenerator = new Base64StringKeyGenerator(16);
 
+    public User getUserById(Long id) {
+        return userRepository.findById(id)
+                .orElseThrow(() -> new RuntimeException("User not found"));
+    }
+
     public User getUserByEmail(String email) {
         return userRepository.findByEmail(email)
                 .orElseThrow(() -> new RuntimeException("User not found"));
+    }
+
+    public User resolveUserFromOAuth(OAuth2AuthenticationToken token, OAuth2User principal) {
+        String registrationId = token.getAuthorizedClientRegistrationId();
+        String providerId = principal.getName();
+
+        if ("github".equals(registrationId)) {
+            Object idObj = principal.getAttribute("id");
+            if (idObj instanceof Integer) {
+                providerId = String.valueOf(idObj);
+            }
+        } else if ("google".equals(registrationId)) {
+            providerId = principal.getAttribute("sub");
+        }
+
+        return getUserByProviderId(registrationId, providerId);
     }
     
     public User getUserByProviderId(String provider, String providerId) {

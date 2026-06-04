@@ -14,9 +14,12 @@ interface LinksTableProps {
   onDelete?: (id: string) => void;
 }
 
+const redirectBase =
+  process.env.NEXT_PUBLIC_REDIRECT_BASE_URL ?? "http://localhost:8081";
+
 export default function LinksTable({ links, onDelete }: LinksTableProps) {
   const copyLink = (code: string) => {
-    navigator.clipboard.writeText(`http://localhost:8081/${code}`); // Use local for now
+    navigator.clipboard.writeText(`${redirectBase}/${code}`);
     toast.success("Copied to clipboard!");
   };
 

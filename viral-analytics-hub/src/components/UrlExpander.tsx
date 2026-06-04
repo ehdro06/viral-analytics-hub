@@ -42,7 +42,12 @@ export function UrlExpander() {
         throw new Error('Failed to expand URL');
       }
       const data = await res.json();
-      setResult(data);
+      setResult({
+        finalUrl: data.finalUrl,
+        hops: data.hops ?? [],
+        safe: data.safe ?? true,
+        message: data.message ?? data.note,
+      });
     } catch (err) {
       setError('Could not expand this link. It might be invalid or unreachable.');
     } finally {

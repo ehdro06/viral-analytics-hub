@@ -11,7 +11,10 @@ public final class ClickEventStreamFields {
 
     private ClickEventStreamFields() {}
 
-    /** Stream key shared with the analytics consumer (sponge). */
+    /**
+     * Stream key shared with the analytics consumer (sponge).
+     * Documented in {@code docs/click-events-stream.md} (canonical name; not {@code click_events}).
+     */
     public static final String STREAM_KEY = "analytics:events";
 
     /** Link owner; required for tenant-scoped analytics once emitters populate it. */

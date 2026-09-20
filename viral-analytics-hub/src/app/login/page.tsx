@@ -9,7 +9,7 @@ import { useRouter } from "next/navigation";
 
 export default function LoginPage() {
   const backendBase = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8080";
-  const { loginWithMock, user } = useUser();
+  const { user } = useUser();
   const router = useRouter();
 
   useEffect(() => {
@@ -72,24 +72,6 @@ export default function LoginPage() {
                 </Button>
             </div>
 
-            <div className="relative">
-              <div className="absolute inset-0 flex items-center">
-                <span className="w-full border-t border-zinc-800" />
-              </div>
-              <div className="relative flex justify-center text-xs uppercase">
-                <span className="bg-[#09090b] px-2 text-zinc-500">
-                  Or continue with
-                </span>
-              </div>
-            </div>
-
-            <Button 
-                className="w-full bg-indigo-600 hover:bg-indigo-700 text-white h-11 font-medium shadow-[0_0_20px_-5px_rgba(99,102,241,0.4)] transition-all hover:scale-[1.02]"
-                onClick={loginWithMock}
-            >
-                Dev Login (Admin)
-            </Button>
-            
             <p className="px-8 text-center text-sm text-zinc-500">
               By clicking continue, you agree to our{" "}
               <Link href="#" className="underline underline-offset-4 hover:text-zinc-300 transition-colors">

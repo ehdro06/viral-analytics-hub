@@ -8,7 +8,8 @@ import {
   Tooltip,
   ResponsiveContainer,
 } from "recharts";
-import { TimeSeriesPoint } from "@/hooks/use-mock-data";
+import { TimeSeriesPoint } from "@/lib/types";
+import { EmptyChart } from "@/components/DataState";
 
 interface TimeSeriesChartProps {
   data: TimeSeriesPoint[];
@@ -19,9 +20,10 @@ export default function TimeSeriesChart({ data }: TimeSeriesChartProps) {
     () =>
       data.map((d) => ({
         ...d,
-        label: new Date(d.timestamp).toLocaleTimeString([], {
-          hour: "2-digit",
-          minute: "2-digit",
+        label: new Date(d.timestamp).toLocaleString([], {
+          month: "short",
+          day: "numeric",
+          hour: "numeric",
         }),
       })),
     [data]
@@ -33,6 +35,9 @@ export default function TimeSeriesChart({ data }: TimeSeriesChartProps) {
         <h3 className="text-sm font-semibold text-foreground">Clicks Over Time</h3>
         <span className="text-xs text-muted-foreground">Last 48 hours</span>
       </div>
+      {data.every((d) => d.clicks === 0) ? (
+        <EmptyChart />
+      ) : (
       <div className="h-64">
         <ResponsiveContainer width="100%" height="100%">
           <AreaChart data={formatted} margin={{ top: 4, right: 4, left: -20, bottom: 0 }}>
@@ -74,6 +79,7 @@ export default function TimeSeriesChart({ data }: TimeSeriesChartProps) {
           </AreaChart>
         </ResponsiveContainer>
       </div>
+      )}
     </div>
   );
 }

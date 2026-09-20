@@ -1,4 +1,5 @@
-import { GeoDataPoint } from "@/hooks/use-mock-data";
+import { GeoDataPoint } from "@/lib/types";
+import { EmptyChart } from "@/components/DataState";
 import { motion } from "framer-motion";
 import { Globe } from "lucide-react";
 
@@ -16,18 +17,19 @@ export default function GeoBreakdown({ data }: GeoBreakdownProps) {
         <Globe className="w-4 h-4 text-primary" />
         <h3 className="text-sm font-semibold text-foreground">Geographic Distribution</h3>
       </div>
+      {data.length === 0 && <EmptyChart />}
       <div className="space-y-2.5">
         {data.map((item, i) => {
-          const pct = ((item.count / total) * 100).toFixed(1);
+          const pct = total === 0 ? "0.0" : ((item.count / total) * 100).toFixed(1);
           return (
             <motion.div
-              key={item.countryCode}
+              key={`${item.countryCode}-${item.country}`}
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               transition={{ delay: i * 0.04 }}
               className="flex items-center gap-3"
             >
-              <span className="w-7 text-center text-xs font-mono text-muted-foreground">
+              <span title={item.country} className="w-7 text-center text-xs font-mono text-muted-foreground">
                 {item.countryCode}
               </span>
               <div className="flex-1">

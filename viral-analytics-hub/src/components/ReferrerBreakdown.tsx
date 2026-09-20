@@ -1,4 +1,5 @@
-import { ReferrerData } from "@/hooks/use-mock-data";
+import { ReferrerData } from "@/lib/types";
+import { EmptyChart } from "@/components/DataState";
 import { motion } from "framer-motion";
 
 interface ReferrerBreakdownProps {
@@ -6,11 +7,12 @@ interface ReferrerBreakdownProps {
 }
 
 export default function ReferrerBreakdown({ data }: ReferrerBreakdownProps) {
-  const max = Math.max(...data.map((d) => d.clicks));
+  const max = Math.max(1, ...data.map((d) => d.clicks));
 
   return (
     <div className="rounded-xl border border-border bg-card p-5">
       <h3 className="text-sm font-semibold text-foreground mb-4">Top Referrers</h3>
+      {data.length === 0 && <EmptyChart />}
       <div className="space-y-3">
         {data.map((item, i) => (
           <motion.div
@@ -26,7 +28,7 @@ export default function ReferrerBreakdown({ data }: ReferrerBreakdownProps) {
                   {item.clicks.toLocaleString()}
                 </span>
                 <span className="text-xs text-primary font-medium w-12 text-right">
-                  {item.percentage}%
+                  {item.percentage.toFixed(1)}%
                 </span>
               </div>
             </div>

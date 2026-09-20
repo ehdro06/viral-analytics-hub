@@ -1,73 +1,44 @@
-# Welcome to your Lovable project
+# ViralLink Web
 
-## Project info
+Next.js dashboard for the ViralLink URL platform: sign in with Google or GitHub, create short links, watch clicks
+arrive in near real time, and unshorten any URL with a safety check.
 
-**URL**: https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID
+**Stack:** Next.js (App Router), React, TypeScript, Tailwind CSS, shadcn/ui, TanStack Query, Zustand, Recharts.
 
-## How can I edit this code?
+## Pages
 
-There are several ways of editing your application.
+| Route | Purpose |
+|---|---|
+| `/` | Public landing page with the URL expander (redirect chain + Google Safe Browsing check) |
+| `/login` | OAuth login (Google / GitHub), handled by the user service |
+| `/dashboard` | Live stats: clicks in the last minute / 24h, unique visitors, peak per minute, charts |
+| `/analytics` | Clicks over time, top referrers, geography |
+| `/links` | Create, copy and delete short links (optimistic updates) |
 
-**Use Lovable**
+## How it talks to the backend
 
-Simply visit the [Lovable Project](https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID) and start prompting.
+The browser only calls the Next.js origin. `next.config.ts` rewrites requests to the services:
 
-Changes made via Lovable will be committed automatically to this repo.
+| Path | Service |
+|---|---|
+| `/api/v1/links/*`, `/api/v1/expand` | redirect (`REDIRECT_SERVICE_URL`, default `:8081`) |
+| `/api/v1/analytics/*` | analytics (`ANALYTICS_SERVICE_URL`, default `:8082`) |
+| `/api/*`, `/oauth2/*`, `/login/oauth2/*`, `/logout` | user (`USER_SERVICE_URL`, default `:8080`) |
 
-**Use your preferred IDE**
+Auth: the user service sets a session cookie at login. On every page load the app calls `GET /api/v1/users/me`,
+which returns the profile plus a short-lived JWT. The JWT is kept **in memory only** (never in localStorage) and is
+sent as `Authorization: Bearer ...` to the redirect and analytics services.
 
-If you want to work locally using your own IDE, you can clone this repo and push changes. Pushed changes will also be reflected in Lovable.
+## Run locally
 
-The only requirement is having Node.js & npm installed - [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
-
-Follow these steps:
-
-```sh
-# Step 1: Clone the repository using the project's Git URL.
-git clone <YOUR_GIT_URL>
-
-# Step 2: Navigate to the project directory.
-cd <YOUR_PROJECT_NAME>
-
-# Step 3: Install the necessary dependencies.
-npm i
-
-# Step 4: Start the development server with auto-reloading and an instant preview.
-npm run dev
+```bash
+cp .env.example .env.local
+pnpm install
+pnpm dev -p 3001        # the backend allows the origin http://localhost:3001 by default (FRONTEND_URL)
 ```
 
-**Edit a file directly in GitHub**
+The backend services and their setup (`.env`, Docker for Postgres/Redis) are described in the repository root.
 
-- Navigate to the desired file(s).
-- Click the "Edit" button (pencil icon) at the top right of the file view.
-- Make your changes and commit the changes.
+## Scripts
 
-**Use GitHub Codespaces**
-
-- Navigate to the main page of your repository.
-- Click on the "Code" button (green button) near the top right.
-- Select the "Codespaces" tab.
-- Click on "New codespace" to launch a new Codespace environment.
-- Edit files directly within the Codespace and commit and push your changes once you're done.
-
-## What technologies are used for this project?
-
-This project is built with:
-
-- Vite
-- TypeScript
-- React
-- shadcn-ui
-- Tailwind CSS
-
-## How can I deploy this project?
-
-Simply open [Lovable](https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID) and click on Share -> Publish.
-
-## Can I connect a custom domain to my Lovable project?
-
-Yes, you can!
-
-To connect a domain, navigate to Project > Settings > Domains and click Connect Domain.
-
-Read more here: [Setting up a custom domain](https://docs.lovable.dev/features/custom-domain#custom-domain)
+`pnpm dev` · `pnpm build` · `pnpm start` · `pnpm lint`

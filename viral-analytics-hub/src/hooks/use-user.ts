@@ -1,81 +1,63 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useAuthStore } from "./use-auth-store";
-import { useRouter } from "next/navigation";
 import { useEffect } from "react";
+import { useAuthStore } from "./use-auth-store";
 
-// Fetch user from backend
-const fetchUser = async () => {
+interface UserResponse {
+  id: number;
+  email: string;
+  name: string;
+  tier: "FREE" | "PRO";
+  token: string;
+}
+
+// The session cookie identifies the user; the response also carries a fresh API token.
+const fetchUser = async (): Promise<UserResponse | null> => {
   const res = await fetch("/api/v1/users/me");
-  if (!res.ok) {
-     if (res.status === 401) return null;
-     // Allow 403 or other errors to throw?
-     return null; 
-  }
+  if (!res.ok) return null; // 401 = not logged in
   return res.json();
 };
 
 const logoutUser = async () => {
   try {
-    await fetch("/logout", {
-        method: "POST",
-    }); // Spring Security default logout
-  } catch (e) {
-    // ignore
+    await fetch("/logout", { method: "POST" }); // Spring Security default logout
+  } catch {
+    // ignore: we clear local state either way
   }
 };
+
+const TOKEN_REFRESH_MS = 30 * 60 * 1000; // API tokens live for 24h; refresh well before that
 
 export function useUser() {
   const { setUser, logout: clearStore } = useAuthStore();
   const queryClient = useQueryClient();
-  const router = useRouter();
 
   const { data: userData, isLoading, isError } = useQuery({
     queryKey: ["user"],
     queryFn: fetchUser,
-    retry: false, 
-    staleTime: 1000 * 60 * 5, 
+    retry: false,
+    staleTime: 5 * 60 * 1000,
+    refetchInterval: TOKEN_REFRESH_MS,
   });
 
-  // Sync Zustand with Query Data
+  // Mirror the query result into the store so non-React code and other hooks can read the token
   useEffect(() => {
     if (userData) {
-        // Backend returns: { id, email, name, token }
-        const { token, ...userFields } = userData;
-        // Default tier to FREE for now
-        setUser({ ...userFields, tier: "FREE" }, token);
-    } else if (userData === null && !isLoading) {
-        // Explicitly clear if null returned (401)
-        // clearStore(); // Optional: might cause loops if not careful
+      const { token, id, ...rest } = userData;
+      setUser({ ...rest, id: String(id) }, token);
     }
-  }, [userData, setUser, isLoading]);
+  }, [userData, setUser]);
 
-  // Handle Logout
   const logout = async () => {
     await logoutUser();
     clearStore();
     queryClient.removeQueries({ queryKey: ["user"] });
     window.location.href = "/login";
   };
-  
-  // Dev Helper
-  const loginWithMock = () => {
-      const mockUser = {
-        id: "mock-1",
-        name: "Admin User",
-        email: "admin@virallink.com",
-        tier: "PRO" as const,
-      };
-      // We manually seed the query cache
-      // queryClient.setQueryData(["user"], { ...mockUser, token: "mock-jwt" });
-      setUser(mockUser, "mock-jwt-token-xyz");
-      router.push("/");
-  }
 
   return {
-    user: userData, // This will be the full response including token, but component usually just needs user
+    user: userData,
     isLoading,
     isError,
     logout,
-    loginWithMock
   };
 }

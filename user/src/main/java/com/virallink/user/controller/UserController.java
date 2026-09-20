@@ -20,7 +20,7 @@ public class UserController {
     private final UserService userService;
     private final JwtService jwtService;
 
-    public record UserResponse(Long id, String email, String name, String token) {}
+    public record UserResponse(Long id, String email, String name, String tier, String token) {}
 
     @GetMapping("/me")
     public ResponseEntity<UserResponse> getCurrentUser(@AuthenticationPrincipal OAuth2User principal, 
@@ -35,7 +35,7 @@ public class UserController {
         // Generate Token
         String jwtToken = jwtService.generateToken(Map.of("userId", user.getId()), user.getEmail());
         
-        return ResponseEntity.ok(new UserResponse(user.getId(), user.getEmail(), user.getName(), jwtToken));
+        return ResponseEntity.ok(new UserResponse(user.getId(), user.getEmail(), user.getName(), user.getTier(), jwtToken));
     }
 
     @PostMapping("/keys")

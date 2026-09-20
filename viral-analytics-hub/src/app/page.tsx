@@ -11,7 +11,8 @@ import {
   Zap, 
   ShieldCheck, 
   Lock,
-  ArrowRight
+  ArrowRight,
+  type LucideIcon,
 } from 'lucide-react';
 import { Card, CardContent } from "@/components/ui/card";
 
@@ -144,7 +145,7 @@ export default function LandingPage() {
   );
 }
 
-function FeatureCard({ icon: Icon, title, description }: { icon: any, title: string, description: string }) {
+function FeatureCard({ icon: Icon, title, description }: { icon: LucideIcon; title: string; description: string }) {
   return (
     <Card className="border-0 shadow-none bg-transparent">
       <CardContent className="pt-6 space-y-4">

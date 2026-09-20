@@ -2,17 +2,31 @@ package com.virallink.analytics.service;
 
 import com.maxmind.geoip2.DatabaseReader;
 import com.maxmind.geoip2.model.CityResponse;
+import jakarta.annotation.PostConstruct;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
-import jakarta.annotation.PostConstruct;
 import java.io.File;
 import java.net.InetAddress;
+import java.util.Optional;
+import java.util.regex.Pattern;
 
+/**
+ * Resolves an (already anonymised) IP to country/city using a local MaxMind GeoLite2-City database.
+ * Reading the .mmdb file needs no API key: a MaxMind account is only needed to download/update it.
+ */
 @Service
 @Slf4j
 public class GeoService {
+
+    public record Geo(String country, String countryCode, String city) {
+        public static final Geo UNKNOWN = new Geo("Unknown", "??", "Unknown");
+        public static final Geo LOCAL = new Geo("Localhost", "LO", "Localhost");
+    }
+
+    private static final Pattern IPV4 = Pattern.compile("^\\d{1,3}(\\.\\d{1,3}){3}$");
+    private static final Pattern IPV6 = Pattern.compile("^[0-9a-fA-F:.]+$");
 
     private final boolean cityEnabled;
     private final String mmdbPath;
@@ -27,58 +41,59 @@ public class GeoService {
     @PostConstruct
     void init() {
         if (!cityEnabled) {
-            log.info("Geo city enrichment disabled (analytics.geo.city.enabled=false)");
+            log.info("Geo enrichment disabled (analytics.geo.city.enabled=false)");
             return;
         }
-
         if (mmdbPath == null || mmdbPath.isBlank()) {
-            log.warn("Geo city enrichment enabled but no mmdb path configured (analytics.geo.city.mmdb-path). Disabling.");
+            log.warn("Geo enrichment enabled but no database path configured (analytics.geo.city.mmdb-path). Disabling.");
             return;
         }
-
         File dbFile = new File(mmdbPath);
         if (!dbFile.exists()) {
-            log.warn("GeoLite database not found at {}. Disabling city enrichment.", mmdbPath);
+            log.warn("GeoLite database not found at {}. Geo enrichment disabled.", dbFile.getAbsolutePath());
             return;
         }
-
         try {
             dbReader = new DatabaseReader.Builder(dbFile).build();
-            log.info("Loaded GeoLite database for city enrichment from {}", mmdbPath);
+            log.info("Loaded GeoLite2 database from {}", dbFile.getAbsolutePath());
         } catch (Exception e) {
-            log.error("Failed to load GeoLite database. City enrichment disabled.", e);
+            log.error("Failed to load GeoLite database. Geo enrichment disabled.", e);
             dbReader = null;
         }
     }
 
-    public String getCountry(String ip) {
-        if (isLocal(ip)) return "Localhost";
-        if (!cityEnabled || dbReader == null) return "Unknown";
-        try {
-            CityResponse response = dbReader.city(InetAddress.getByName(ip));
-            if (response.getCountry() != null && response.getCountry().getName() != null) {
-                return response.getCountry().getName();
-            }
-        } catch (Exception e) {
-            log.debug("GeoIP country lookup failed: {}", e.getMessage());
+    public Geo lookup(String ip) {
+        InetAddress address = parseLiteral(ip);
+        if (address == null) return Geo.UNKNOWN;
+        if (address.isLoopbackAddress() || address.isSiteLocalAddress() || address.isAnyLocalAddress()
+                || address.isLinkLocalAddress()) {
+            return Geo.LOCAL;
         }
-        return "Unknown";
+        if (dbReader == null) return Geo.UNKNOWN;
+
+        try {
+            Optional<CityResponse> response = dbReader.tryCity(address);
+            if (response.isEmpty()) return Geo.UNKNOWN;
+            CityResponse r = response.get();
+            String country = r.getCountry() != null && r.getCountry().getName() != null ? r.getCountry().getName() : "Unknown";
+            String code = r.getCountry() != null && r.getCountry().getIsoCode() != null ? r.getCountry().getIsoCode() : "??";
+            String city = r.getCity() != null && r.getCity().getName() != null ? r.getCity().getName() : "Unknown";
+            return new Geo(country, code, city);
+        } catch (Exception e) {
+            log.debug("GeoIP lookup failed for {}: {}", ip, e.getMessage());
+            return Geo.UNKNOWN;
+        }
     }
 
-    public String getCity(String ip) {
-        if (!cityEnabled || dbReader == null || isLocal(ip)) return "Unknown";
+    /** Only parses IP literals (never a host name), so it cannot trigger a DNS lookup. */
+    private InetAddress parseLiteral(String ip) {
+        if (ip == null) return null;
+        boolean literal = ip.contains(":") ? IPV6.matcher(ip).matches() : IPV4.matcher(ip).matches();
+        if (!literal) return null;
         try {
-            CityResponse response = dbReader.city(InetAddress.getByName(ip));
-            if (response.getCity() != null && response.getCity().getName() != null) {
-                return response.getCity().getName();
-            }
+            return InetAddress.getByName(ip);
         } catch (Exception e) {
-            log.debug("GeoIP city lookup failed: {}", e.getMessage());
+            return null;
         }
-        return "Unknown";
-    }
-
-    private boolean isLocal(String ip) {
-        return "127.0.0.1".equals(ip) || "0:0:0:0:0:0:0:1".equals(ip);
     }
 }

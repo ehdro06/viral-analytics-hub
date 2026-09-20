@@ -17,3 +17,14 @@ Desktop.ini
 # Temp
 tmp/
 temp/
+
+# Secrets & local data
+.env
+.env.*
+!.env.example
+data/
+*.mmdb
+
+# Build output
+build/
+.gradle/

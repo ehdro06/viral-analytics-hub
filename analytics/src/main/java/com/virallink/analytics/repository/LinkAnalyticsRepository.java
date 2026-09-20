@@ -6,35 +6,54 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
+import java.time.LocalDateTime;
 import java.util.List;
 
+/** Every query is scoped to one owner: a user must never see another user's clicks. */
 @Repository
 public interface LinkAnalyticsRepository extends JpaRepository<LinkAnalytics, Long> {
-    List<LinkAnalytics> findByShortCode(String shortCode);
 
-    // Counts for summary
-    long countByClickedAtAfter(java.time.LocalDateTime after);
+    long countByOwnerId(Long ownerId);
 
-    @Query(value = "SELECT COUNT(DISTINCT ip_address) FROM link_analytics WHERE clicked_at >= :after", nativeQuery = true)
-    long countDistinctIpSince(@Param("after") java.time.LocalDateTime after);
+    long countByOwnerIdAndClickedAtAfter(Long ownerId, LocalDateTime after);
 
-    @Query(value = "SELECT COALESCE(MAX(c),0) FROM (SELECT COUNT(*) AS c FROM link_analytics WHERE clicked_at >= now() - interval '1 day' GROUP BY date_trunc('minute', clicked_at)) t", nativeQuery = true)
-    long peakPerMinuteLastDay();
+    @Query(value = "SELECT COUNT(DISTINCT ip_address) FROM link_analytics WHERE owner_id = :ownerId AND clicked_at >= :after",
+            nativeQuery = true)
+    long countDistinctIpSince(@Param("ownerId") Long ownerId, @Param("after") LocalDateTime after);
 
-    // Geo aggregation
-    @Query(value = "SELECT COALESCE(country, 'Unknown') AS country, COUNT(*) AS count FROM link_analytics GROUP BY COALESCE(country, 'Unknown') ORDER BY count DESC LIMIT 20", nativeQuery = true)
-    List<GeoCountProjection> topCountries();
+    @Query(value = """
+            SELECT COALESCE(MAX(c), 0) FROM (
+                SELECT COUNT(*) AS c FROM link_analytics
+                WHERE owner_id = :ownerId AND clicked_at >= :after
+                GROUP BY date_trunc('minute', clicked_at)) t
+            """, nativeQuery = true)
+    long peakPerMinuteSince(@Param("ownerId") Long ownerId, @Param("after") LocalDateTime after);
 
-    // Referrer aggregation
-    @Query(value = "SELECT COALESCE(referer, 'direct') AS referrer, COUNT(*) AS count FROM link_analytics GROUP BY COALESCE(referer, 'direct') ORDER BY count DESC LIMIT 20", nativeQuery = true)
-    List<ReferrerCountProjection> topReferrers();
+    @Query(value = """
+            SELECT COALESCE(country, 'Unknown') AS country, COALESCE(country_code, '??') AS code, COUNT(*) AS count
+            FROM link_analytics WHERE owner_id = :ownerId
+            GROUP BY COALESCE(country, 'Unknown'), COALESCE(country_code, '??')
+            ORDER BY count DESC LIMIT 20
+            """, nativeQuery = true)
+    List<GeoCountProjection> topCountries(@Param("ownerId") Long ownerId);
 
-    // Time series - last 48h grouped hourly
-    @Query(value = "SELECT date_trunc('hour', clicked_at) AS bucket, COUNT(*) AS count FROM link_analytics WHERE clicked_at >= now() - interval '48 hour' GROUP BY bucket ORDER BY bucket", nativeQuery = true)
-    List<TimeSeriesProjection> hourlyLast48h();
+    @Query(value = """
+            SELECT COALESCE(referer, 'direct') AS referrer, COUNT(*) AS count
+            FROM link_analytics WHERE owner_id = :ownerId
+            GROUP BY COALESCE(referer, 'direct') ORDER BY count DESC LIMIT 20
+            """, nativeQuery = true)
+    List<ReferrerCountProjection> topReferrers(@Param("ownerId") Long ownerId);
+
+    @Query(value = """
+            SELECT date_trunc('hour', clicked_at) AS bucket, COUNT(*) AS count
+            FROM link_analytics WHERE owner_id = :ownerId AND clicked_at >= :after
+            GROUP BY bucket ORDER BY bucket
+            """, nativeQuery = true)
+    List<TimeSeriesProjection> hourlySince(@Param("ownerId") Long ownerId, @Param("after") LocalDateTime after);
 
     interface GeoCountProjection {
         String getCountry();
+        String getCode();
         long getCount();
     }
 
@@ -44,7 +63,7 @@ public interface LinkAnalyticsRepository extends JpaRepository<LinkAnalytics, Lo
     }
 
     interface TimeSeriesProjection {
-        java.time.LocalDateTime getBucket();
+        LocalDateTime getBucket();
         long getCount();
     }
 }

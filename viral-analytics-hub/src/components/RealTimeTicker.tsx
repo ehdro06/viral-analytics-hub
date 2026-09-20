@@ -3,16 +3,18 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Zap } from "lucide-react";
 
 interface RealTimeTickerProps {
-  clicksPerSecond: number;
+  clicksLastMinute: number;
 }
 
-export default function RealTimeTicker({ clicksPerSecond }: RealTimeTickerProps) {
-  const [displayed, setDisplayed] = useState(clicksPerSecond);
-  const isViral = clicksPerSecond > 15;
+const VIRAL_THRESHOLD = 300; // clicks per minute
+
+export default function RealTimeTicker({ clicksLastMinute }: RealTimeTickerProps) {
+  const [displayed, setDisplayed] = useState(clicksLastMinute);
+  const isViral = clicksLastMinute > VIRAL_THRESHOLD;
 
   useEffect(() => {
-    setDisplayed(clicksPerSecond);
-  }, [clicksPerSecond]);
+    setDisplayed(clicksLastMinute);
+  }, [clicksLastMinute]);
 
   return (
     <div
@@ -24,7 +26,7 @@ export default function RealTimeTicker({ clicksPerSecond }: RealTimeTickerProps)
     >
       <div className="flex items-center justify-between mb-2">
         <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
-          Live Clicks / sec
+          Last minute
         </span>
         <div className="flex items-center gap-1.5">
           <div
@@ -46,7 +48,7 @@ export default function RealTimeTicker({ clicksPerSecond }: RealTimeTickerProps)
               isViral ? "text-gradient-viral" : "text-foreground"
             }`}
           >
-            {displayed}
+            {displayed.toLocaleString()}
           </motion.span>
         </AnimatePresence>
         {isViral && (
@@ -60,6 +62,7 @@ export default function RealTimeTicker({ clicksPerSecond }: RealTimeTickerProps)
           </motion.div>
         )}
       </div>
+      <p className="text-xs text-muted-foreground mt-1">clicks in the last 60 seconds</p>
     </div>
   );
 }

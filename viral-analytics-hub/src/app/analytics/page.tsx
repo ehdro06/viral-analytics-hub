@@ -4,31 +4,11 @@ import DashboardLayout from "@/components/DashboardLayout";
 import TimeSeriesChart from "@/components/TimeSeriesChart";
 import ReferrerBreakdown from "@/components/ReferrerBreakdown";
 import GeoBreakdown from "@/components/GeoBreakdown";
-import { useMockData, AnalyticsData } from "@/hooks/use-mock-data";
-import { useAuthStore } from "@/hooks/use-auth-store";
-import { useQuery } from "@tanstack/react-query";
+import { AnalyticsSkeleton, ErrorState } from "@/components/DataState";
+import { useAnalytics } from "@/hooks/use-analytics";
 
 export default function AnalyticsPage() {
-  const { analytics } = useMockData();
-  const { token } = useAuthStore();
-
-  const { data: liveAnalytics } = useQuery<AnalyticsData>({
-    queryKey: ["analytics-summary"],
-    enabled: !!token,
-    retry: 1,
-    queryFn: async () => {
-      const res = await fetch("/api/v1/analytics/summary", {
-        headers: token ? { Authorization: `Bearer ${token}` } : undefined,
-      });
-      if (!res.ok) {
-        throw new Error("Failed to fetch analytics summary");
-      }
-      const api = await res.json();
-      return mapApiToAnalytics(api, analytics);
-    },
-  });
-
-  const data: AnalyticsData = liveAnalytics ?? analytics;
+  const { data, isPending, isError, error, refetch } = useAnalytics();
 
   return (
     <DashboardLayout>
@@ -39,26 +19,26 @@ export default function AnalyticsPage() {
             Deep dive into your link performance
           </p>
         </div>
-        <TimeSeriesChart data={data.timeSeries} />
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-          <ReferrerBreakdown data={data.referrers} />
-          <GeoBreakdown data={data.geoData} />
-        </div>
+
+        {isError && (
+          <ErrorState
+            message={error instanceof Error ? error.message : "The analytics service is unreachable."}
+            onRetry={() => refetch()}
+          />
+        )}
+
+        {isPending && !isError && <AnalyticsSkeleton />}
+
+        {data && (
+          <>
+            <TimeSeriesChart data={data.timeSeries} />
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+              <ReferrerBreakdown data={data.referrers} />
+              <GeoBreakdown data={data.geoData} />
+            </div>
+          </>
+        )}
       </div>
     </DashboardLayout>
   );
-}
-
-function mapApiToAnalytics(api: any, fallback: AnalyticsData): AnalyticsData {
-  return {
-    totalClicks: api?.totalClicks ?? fallback.totalClicks ?? 0,
-    clicksToday: api?.clicksToday ?? fallback.clicksToday ?? 0,
-    clicksThisWeek: api?.clicksThisWeek ?? fallback.clicksThisWeek ?? 0,
-    uniqueVisitors: api?.uniqueVisitors ?? fallback.uniqueVisitors ?? 0,
-    avgClicksPerDay: api?.avgClicksPerDay ?? fallback.avgClicksPerDay ?? 0,
-    peakClicksPerMinute: api?.peakClicksPerMinute ?? fallback.peakClicksPerMinute ?? 0,
-    geoData: api?.geoData ?? fallback.geoData ?? [],
-    timeSeries: api?.timeSeries ?? fallback.timeSeries ?? [],
-    referrers: api?.referrers ?? fallback.referrers ?? [],
-  };
 }

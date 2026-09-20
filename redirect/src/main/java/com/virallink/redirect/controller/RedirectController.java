@@ -25,16 +25,12 @@ public class RedirectController {
 
     @GetMapping("/{shortCode}")
     public ResponseEntity<Void> redirect(@PathVariable("shortCode") String shortCode, HttpServletRequest request) {
-        log.info("Redirect Request: {}", shortCode);
+        log.debug("Redirect request: {}", shortCode);
         
-        String ipAddress = request.getHeader("X-Forwarded-For");
-        if (ipAddress == null || ipAddress.isEmpty()) {
-            ipAddress = request.getRemoteAddr();
-        } else {
-            // X-Forwarded-For may contain multiple IPs, the first one is the client
-            ipAddress = ipAddress.split(",")[0].trim();
-        }
-        
+        // Behind a proxy/load balancer Tomcat rewrites this from X-Forwarded-For, but only when the request comes
+        // from a trusted proxy (server.forward-headers-strategy=native). A client cannot spoof its own IP.
+        String ipAddress = request.getRemoteAddr();
+
         String userAgent = request.getHeader("User-Agent");
         String referer = request.getHeader("Referer");
 

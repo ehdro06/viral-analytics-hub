@@ -1,4 +1,4 @@
-package com.virallink.analytics;
+package com.virallink.redirect;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -10,10 +10,10 @@ import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.utility.DockerImageName;
 
-@SpringBootTest
+@SpringBootTest(classes = RedirectApplication.class)
 @ActiveProfiles("test")
 @Testcontainers
-class AnalyticsApplicationTests {
+class RedirectApplicationTests {
 
 	@Container
 	static GenericContainer<?> redis = new GenericContainer<>(DockerImageName.parse("redis:7-alpine"))

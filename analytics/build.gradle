@@ -42,7 +42,13 @@ dependencies {
 	testImplementation 'org.springframework.boot:spring-boot-starter-data-jpa-test'
 	testImplementation 'org.springframework.boot:spring-boot-starter-data-redis-test'
 	testImplementation 'org.springframework.boot:spring-boot-starter-opentelemetry-test'
+	// Version pinned explicitly - leaving these unversioned fails ("Could not find ...:junit-jupiter:.").
+	// spring-boot-dependencies:4.1.1 itself declares testcontainers.version=2.0.5, but that version was
+	// never actually published (checked Maven Central directly); 1.21.4 is the real latest as of writing.
+	testImplementation 'org.testcontainers:junit-jupiter:1.21.4'
+	testImplementation 'org.testcontainers:testcontainers:1.21.4'
 	testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+	testRuntimeOnly 'com.h2database:h2'
 	developmentOnly 'org.springframework.boot:spring-boot-devtools'
 }
 

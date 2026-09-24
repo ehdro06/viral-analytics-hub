@@ -1,4 +1,3 @@
-import { useEffect, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Zap } from "lucide-react";
 
@@ -9,12 +8,7 @@ interface RealTimeTickerProps {
 const VIRAL_THRESHOLD = 300; // clicks per minute
 
 export default function RealTimeTicker({ clicksLastMinute }: RealTimeTickerProps) {
-  const [displayed, setDisplayed] = useState(clicksLastMinute);
   const isViral = clicksLastMinute > VIRAL_THRESHOLD;
-
-  useEffect(() => {
-    setDisplayed(clicksLastMinute);
-  }, [clicksLastMinute]);
 
   return (
     <div
@@ -40,7 +34,7 @@ export default function RealTimeTicker({ clicksLastMinute }: RealTimeTickerProps
       <div className="flex items-center gap-3">
         <AnimatePresence mode="popLayout">
           <motion.span
-            key={displayed}
+            key={clicksLastMinute}
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -10 }}
@@ -48,7 +42,7 @@ export default function RealTimeTicker({ clicksLastMinute }: RealTimeTickerProps
               isViral ? "text-gradient-viral" : "text-foreground"
             }`}
           >
-            {displayed.toLocaleString()}
+            {clicksLastMinute.toLocaleString()}
           </motion.span>
         </AnimatePresence>
         {isViral && (

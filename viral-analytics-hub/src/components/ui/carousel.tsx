@@ -93,6 +93,9 @@ const Carousel = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTMLDivEl
         return;
       }
 
+      // Sync the initial scroll-button state once the embla instance exists; there's no render-time
+      // equivalent to read it from, so it has to happen here rather than during render.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       onSelect(api);
       api.on("reInit", onSelect);
       api.on("select", onSelect);

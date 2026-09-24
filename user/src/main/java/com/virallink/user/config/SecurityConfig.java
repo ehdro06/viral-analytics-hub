@@ -35,6 +35,9 @@ public class SecurityConfig {
             .csrf(AbstractHttpConfigurer::disable) // Disable CSRF for simplicity in Phase 1 API
             .cors(cors -> cors.configurationSource(corsConfigurationSource()))
             .authorizeHttpRequests(auth -> auth
+                // Health must stay public: infra probes and the local dev script have no JWT to send.
+                // show-details defaults to "never", so this never leaks anything beyond {"status":"UP"}.
+                .requestMatchers("/actuator/health", "/actuator/health/**").permitAll()
                 .requestMatchers("/login/**", "/error", "/webjars/**").permitAll()
                 .anyRequest().authenticated()
             )

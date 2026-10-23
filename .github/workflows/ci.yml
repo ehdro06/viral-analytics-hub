@@ -56,8 +56,15 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
-          cache: pnpm
-          cache-dependency-path: viral-analytics-hub/pnpm-lock.yaml
+
+      # Not setup-node's `cache: pnpm`: it resolves the store from the repo root (global store), but
+      # viral-analytics-hub/.npmrc sets store-dir=.pnpm-store, so that path never exists and the post-job
+      # cache save fails the job. Cache the store pnpm actually uses instead.
+      - uses: actions/cache@v4
+        with:
+          path: viral-analytics-hub/.pnpm-store
+          key: pnpm-store-${{ runner.os }}-${{ hashFiles('viral-analytics-hub/pnpm-lock.yaml') }}
+          restore-keys: pnpm-store-${{ runner.os }}-
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile

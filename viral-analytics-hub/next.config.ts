@@ -3,10 +3,12 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 // Where each backend service lives. Defaults are the local dev ports; in production set these to the
-// deployed service URLs (they are read at build time on Vercel).
-const USER_SERVICE = process.env.USER_SERVICE_URL ?? "http://localhost:8080";
-const REDIRECT_SERVICE = process.env.REDIRECT_SERVICE_URL ?? "http://localhost:8081";
-const ANALYTICS_SERVICE = process.env.ANALYTICS_SERVICE_URL ?? "http://localhost:8082";
+// deployed service URLs, e.g. https://user-xxxx.a.run.app. They are read at build time (baked into the
+// routes manifest), so changing one on Vercel needs a redeploy. A trailing slash is tolerated.
+const serviceUrl = (value: string | undefined, fallback: string) => (value || fallback).replace(/\/+$/, "");
+const USER_SERVICE = serviceUrl(process.env.USER_SERVICE_URL, "http://localhost:8080");
+const REDIRECT_SERVICE = serviceUrl(process.env.REDIRECT_SERVICE_URL, "http://localhost:8081");
+const ANALYTICS_SERVICE = serviceUrl(process.env.ANALYTICS_SERVICE_URL, "http://localhost:8082");
 
 // The browser only ever talks to the Next.js origin; these rewrites proxy to the right service.
 // (A dedicated API gateway is planned to replace this.)

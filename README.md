@@ -7,7 +7,7 @@
 
 B2B URL shortener and click analytics platform. Short links resolve on a **decoupled redirect path** (302 first, analytics async); the dashboard polls scoped aggregates—no WebSockets in this MVP.
 
-**Status:** Local-dev MVP. Core flows work end-to-end; production deploy, API-key Redis cache, and billing are out of scope for now.
+**Status:** Local-dev MVP. Core flows work end-to-end. Deploy-ready for Vercel + Cloud Run + Neon (manual, see [docs/DEPLOY.md](docs/DEPLOY.md)); API-key Redis cache and billing are out of scope for now.
 
 ## Architecture
 
@@ -76,6 +76,8 @@ Full steps, env table, and smoke test: **[docs/LOCAL_DEV.md](docs/LOCAL_DEV.md)*
 Agent handover (what’s done, what’s next): **[docs/HANDOVER.md](docs/HANDOVER.md)**.
 
 Click stream contract: **[docs/click-events-stream.md](docs/click-events-stream.md)**.
+
+Production deploy (Vercel, Cloud Run, Neon, Redis options): **[docs/DEPLOY.md](docs/DEPLOY.md)**.
 
 ## Repository layout
 

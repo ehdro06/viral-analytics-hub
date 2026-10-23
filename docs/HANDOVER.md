@@ -2,6 +2,13 @@
 
 Last updated after commit **`a969228`** (`feat: OAuth JWT bridge, settings UI, and build fixes`). Branch was **ahead of `origin/main`** by several commits — verify `git status` before assuming remote state.
 
+> **Deploy-readiness pass (later):** env-driven config, `prod` profiles, Dockerfiles and a manual Cloud Run
+> workflow were added; see [DEPLOY.md](./DEPLOY.md). Corrections to this note found on the way:
+> Spring Boot is **4.1.1** (not 4.1-M1); the live auth flow is **session cookie -> `GET /api/v1/users/me` -> JWT**
+> (`OAuth2LoginSuccessHandler` and `/auth/callback` below are unused since merge `510521e`); Next.js has **no**
+> `output: "standalone"`; analytics does **not** read `API_KEY_SIGNING_SECRET`; Spring Session was not actually
+> active until `user/build.gradle` switched to `spring-boot-starter-session-data-redis`.
+
 ---
 
 ## What this project is
@@ -120,7 +127,7 @@ JVM services need **`gradle.properties`** from `gradle.properties.example` (JDK 
 - **Link status** — frontend hardcodes `active` (`use-links.ts` TODO).
 - **LinksTable UI** still displays `vrl.ink/{code}` in places while copy uses `REDIRECT_BASE_URL` — cosmetic inconsistency.
 - **Billing / tiers** — `User.tier` exists; UI always shows FREE.
-- **Production deploy** — no K8s/Terraform in repo; Next standalone output is prepared but not wired.
+- **Production deploy** — prepared for Vercel + Cloud Run + Neon, not yet performed: [DEPLOY.md](./DEPLOY.md). No Terraform.
 - **CI on Windows/UNC** — Gradle file watching can fail on network paths; document or set `org.gradle.vfs.watch=false`.
 - **Vitest** — config excluded from Next typecheck; add `@vitejs/plugin-react-swc` or remove `vitest.config.ts` if tests are wanted in CI.
 - **Push to origin** — confirm whether `main` on GitHub has latest commits.

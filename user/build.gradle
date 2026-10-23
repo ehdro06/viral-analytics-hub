@@ -31,7 +31,9 @@ dependencies {
 	implementation 'org.springframework.boot:spring-boot-starter-security-oauth2-client'
 	implementation 'org.springframework.boot:spring-boot-starter-validation'
 	implementation 'org.springframework.boot:spring-boot-starter-webmvc'
-	implementation 'org.springframework.session:spring-session-data-redis'
+	// The Boot starter (not bare spring-session-data-redis): Boot 4 ships the Spring Session auto-configuration in
+	// separate modules, and without it sessions silently stay in Tomcat memory.
+	implementation 'org.springframework.boot:spring-boot-starter-session-data-redis'
     implementation 'io.jsonwebtoken:jjwt-api:0.12.5'
     runtimeOnly 'io.jsonwebtoken:jjwt-impl:0.12.5'
     runtimeOnly 'io.jsonwebtoken:jjwt-jackson:0.12.5'

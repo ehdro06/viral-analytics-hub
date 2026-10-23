@@ -1,0 +1,14 @@
+# Build context = this directory. Keep it to what the Dockerfile copies; never send local secrets or machine config.
+build/
+.gradle/
+bin/
+out/
+.idea/
+.vscode/
+*.iml
+.env
+.env.*
+gradle.properties
+HELP.md
+Dockerfile
+.dockerignore

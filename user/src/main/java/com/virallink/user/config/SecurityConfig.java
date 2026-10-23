@@ -53,6 +53,9 @@ public class SecurityConfig {
                     .userService(customOAuth2UserService) // Persist user on login for non-OIDC providers
                 )
                 .defaultSuccessUrl(frontendUrl, true) // Redirect to frontend after login
+                // Absolute, like the success URL: a relative one would be resolved against the Host this service
+                // sees (the Cloud Run URL behind Vercel), stranding the user on the backend's own login page.
+                .failureUrl(frontendUrl + "/login?error")
             )
             .logout(logout -> logout
                 .logoutSuccessUrl(frontendUrl + "/login")

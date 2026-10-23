@@ -1,0 +1,109 @@
+name: Deploy to Cloud Run
+
+# PROPOSAL, manual trigger only: this never runs on push or pull_request.
+# Prerequisites (one-time, see docs/DEPLOY.md "CI/CD"): Artifact Registry repository, Workload Identity Federation
+# pool + provider for this repo, a deploy service account, the repository variables below, and a first manual
+# `gcloud run deploy` per service (that is where env vars and Secret Manager secrets are attached; this workflow
+# only rolls out a new image and re-applies the scaling settings, so existing env/secrets are kept).
+#
+# Repository variables (Settings -> Secrets and variables -> Actions -> Variables):
+#   GCP_PROJECT_ID, GCP_REGION (e.g. europe-west1), GCP_ARTIFACT_REPO (e.g. virallink),
+#   GCP_WORKLOAD_IDENTITY_PROVIDER (projects/<number>/locations/global/workloadIdentityPools/<pool>/providers/<provider>),
+#   GCP_DEPLOY_SERVICE_ACCOUNT (deployer@<project>.iam.gserviceaccount.com), MAXMIND_ACCOUNT_ID (optional)
+# Repository secret (optional): MAXMIND_LICENSE_KEY, to bake GeoLite2-City into the analytics image.
+# No JSON service-account keys anywhere: authentication is GitHub OIDC -> Workload Identity Federation.
+
+on:
+  workflow_dispatch:
+    inputs:
+      service:
+        description: Service to deploy
+        type: choice
+        options: [all, user, redirect, analytics]
+        default: all
+
+permissions:
+  contents: read
+  id-token: write # GitHub OIDC token for Workload Identity Federation
+
+concurrency:
+  group: deploy-cloud-run-${{ inputs.service }}
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Deploy ${{ matrix.service }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        service: ${{ fromJSON(inputs.service == 'all' && '["user","redirect","analytics"]' || format('["{0}"]', inputs.service)) }}
+    env:
+      PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+      REGION: ${{ vars.GCP_REGION }}
+      AR_REPO: ${{ vars.GCP_ARTIFACT_REPO }}
+      SERVICE: ${{ matrix.service }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check configuration
+        run: |
+          missing=0
+          for v in PROJECT_ID REGION AR_REPO; do
+            if [ -z "${!v}" ]; then echo "::error::Repository variable for $v is not set (see docs/DEPLOY.md)"; missing=1; fi
+          done
+          exit $missing
+
+      - name: Authenticate to Google Cloud (Workload Identity Federation)
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ vars.GCP_DEPLOY_SERVICE_ACCOUNT }}
+
+      - uses: google-github-actions/setup-gcloud@v2
+
+      - name: Configure Docker for Artifact Registry
+        run: gcloud auth configure-docker "${REGION}-docker.pkg.dev" --quiet
+
+      # Optional: without the license key the analytics image is built without GeoLite2 and records geo as "Unknown".
+      - name: Fetch GeoLite2-City (analytics only, optional)
+        if: matrix.service == 'analytics'
+        env:
+          MAXMIND_ACCOUNT_ID: ${{ vars.MAXMIND_ACCOUNT_ID }}
+          MAXMIND_LICENSE_KEY: ${{ secrets.MAXMIND_LICENSE_KEY }}
+        run: |
+          if [ -z "$MAXMIND_ACCOUNT_ID" ] || [ -z "$MAXMIND_LICENSE_KEY" ]; then
+            echo "::notice::MAXMIND_ACCOUNT_ID / MAXMIND_LICENSE_KEY not set: building analytics without GeoLite2."
+            exit 0
+          fi
+          curl -fsSL -u "${MAXMIND_ACCOUNT_ID}:${MAXMIND_LICENSE_KEY}" -o "$RUNNER_TEMP/geolite2-city.tar.gz" \
+            "https://download.maxmind.com/geoip/databases/GeoLite2-City/download?suffix=tar.gz"
+          tar -xzf "$RUNNER_TEMP/geolite2-city.tar.gz" -C analytics/geoip --strip-components=1 --wildcards '*/GeoLite2-City.mmdb'
+          ls -l analytics/geoip
+
+      - name: Build and push image
+        run: |
+          IMAGE="${REGION}-docker.pkg.dev/${PROJECT_ID}/${AR_REPO}/${SERVICE}:${GITHUB_SHA}"
+          docker build -t "$IMAGE" "./${SERVICE}"
+          docker push "$IMAGE"
+          echo "IMAGE=$IMAGE" >> "$GITHUB_ENV"
+
+      # Scaling per docs/DEPLOY.md "Cloud Run settings":
+      #   analytics: Redis Streams consumer with a fixed consumer name -> exactly one instance, CPU always allocated
+      #   redirect:  keep one warm instance (JVM cold starts on the hot path)
+      #   user:      scale to zero
+      - name: Deploy to Cloud Run
+        run: |
+          case "$SERVICE" in
+            analytics) SCALING="--min-instances=1 --max-instances=1 --no-cpu-throttling" ;;
+            redirect)  SCALING="--min-instances=1 --cpu-throttling" ;;
+            user)      SCALING="--min-instances=0 --cpu-throttling" ;;
+          esac
+          gcloud run deploy "$SERVICE" \
+            --project="$PROJECT_ID" \
+            --region="$REGION" \
+            --image="$IMAGE" \
+            --cpu-boost \
+            $SCALING \
+            --quiet
+          gcloud run services describe "$SERVICE" --project="$PROJECT_ID" --region="$REGION" --format='value(status.url)'

@@ -1,6 +1,6 @@
 # Local development
 
-Overview and architecture: [README](../README.md). Contribution guidelines: [CONTRIBUTING](../CONTRIBUTING.md). Agent handover: [HANDOVER.md](./HANDOVER.md).
+Overview and architecture: [README](../README.md). Contribution guidelines: [CONTRIBUTING](../CONTRIBUTING.md). Agent handover: [HANDOVER.md](./HANDOVER.md). Production: [DEPLOY.md](./DEPLOY.md).
 
 ## Infrastructure
 
@@ -18,11 +18,13 @@ Copy `.env.example` to `.env` in the repo root (or export in your shell). All th
 | Variable | Used by | Purpose |
 |----------|---------|---------|
 | `JWT_SECRET` | user, redirect, analytics | Base64 HMAC key for Bearer JWT |
-| `API_KEY_SIGNING_SECRET` | user, redirect, analytics | HMAC for `prefix.secret` API keys |
+| `API_KEY_SIGNING_SECRET` | user, redirect | HMAC for `prefix.secret` API keys (analytics does not accept API keys) |
 | `HASHIDS_SALT` | redirect | Short-code generation |
 | `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | user | OAuth (optional for local) |
 | `GITHUB_CLIENT_ID` / `GITHUB_CLIENT_SECRET` | user | OAuth (optional for local) |
 | `SAFE_BROWSING_API_KEY` | redirect | Google Safe Browsing (optional) |
+| `FRONTEND_URL` | user | Post-login redirect + CORS origin, default `http://localhost:3000` |
+| `DB_URL`, `DB_USERNAME`, `DB_PASSWORD`, `REDIS_HOST`, `REDIS_PORT`, `REDIS_PASSWORD`, `REDIS_SSL`, `PORT` | all JVM services | Optional overrides; defaults match `docker-compose.yml` and the ports below |
 
 Generate a JWT secret (example):
 

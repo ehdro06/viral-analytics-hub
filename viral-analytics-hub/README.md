@@ -34,10 +34,15 @@ sent as `Authorization: Bearer ...` to the redirect and analytics services.
 ```bash
 cp .env.example .env.local
 pnpm install
-pnpm dev -p 3001        # the backend allows the origin http://localhost:3001 by default (FRONTEND_URL)
+pnpm dev                # http://localhost:3000, the backend's default FRONTEND_URL (post-login redirect)
 ```
 
 The backend services and their setup (`.env`, Docker for Postgres/Redis) are described in the repository root.
+
+## Deploy (Vercel)
+
+Set the variables listed in the Vercel section of `.env.example` and redeploy; they are read at build time.
+`next.config.ts` deliberately has no `output: "standalone"`: Vercel does not need it. See `docs/DEPLOY.md`.
 
 ## Scripts
 

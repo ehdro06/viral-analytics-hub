@@ -1,14 +1,13 @@
-User-agent: Googlebot
-Allow: /
-
-User-agent: Bingbot
-Allow: /
-
-User-agent: Twitterbot
-Allow: /
-
-User-agent: facebookexternalhit
-Allow: /
-
+# Public pages (landing page + URL expander) may be crawled. The signed-in app, the auth endpoints
+# and the API proxies only show login walls or errors to a crawler, and /oauth2 would start logins.
+# Not access control: those routes are protected by login regardless.
 User-agent: *
 Allow: /
+Disallow: /dashboard
+Disallow: /links
+Disallow: /analytics
+Disallow: /settings
+Disallow: /auth/
+Disallow: /api/
+Disallow: /oauth2/
+Disallow: /login/oauth2/

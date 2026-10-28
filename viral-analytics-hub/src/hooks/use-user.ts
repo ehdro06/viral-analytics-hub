@@ -25,7 +25,7 @@ const logoutUser = async () => {
   }
 };
 
-const TOKEN_REFRESH_MS = 30 * 60 * 1000; // API tokens live for 24h; refresh well before that
+const TOKEN_REFRESH_MS = 30 * 60 * 1000; // API tokens live for 1h; renew at half-life (authFetch also renews on a 401)
 
 export function useUser() {
   const { setUser, logout: clearStore } = useAuthStore();

@@ -91,13 +91,13 @@ jobs:
           echo "IMAGE=$IMAGE" >> "$GITHUB_ENV"
 
       # Scaling (see docs/DEPLOY.md, step 5 and "Analytics"):
-      #   analytics: Redis Streams consumer with a fixed consumer name -> exactly one instance, CPU always allocated
+      #   analytics: drained on demand by Cloud Scheduler; fixed consumer name -> at most one instance
       #   redirect:  keep one warm instance (JVM cold starts on the hot path)
       #   user:      scale to zero
       - name: Deploy to Cloud Run
         run: |
           case "$SERVICE" in
-            analytics) SCALING="--min-instances=1 --max-instances=1 --no-cpu-throttling" ;;
+            analytics) SCALING="--min-instances=0 --max-instances=1 --cpu-throttling" ;;
             redirect)  SCALING="--min-instances=1 --cpu-throttling" ;;
             user)      SCALING="--min-instances=0 --cpu-throttling" ;;
           esac

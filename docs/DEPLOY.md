@@ -95,7 +95,7 @@ the value). Plain values go in `--set-env-vars`. `PORT` is set by Cloud Run; nev
 | `SPRING_PROFILES_ACTIVE` | | ✓ | ✓ | ✓ | `prod` |
 | `DB_URL` | | ✓ | ✓ | ✓ | `jdbc:postgresql://<neon host>/virallink_<service>?sslmode=require` (analytics: add `&reWriteBatchedInserts=true`) |
 | `DB_USERNAME` | | ✓ | ✓ | ✓ | `neondb_owner` |
-| `DB_PASSWORD` | ✓ `DB_PASSWORD` | ✓ | ✓ | ✓ | Neon role password |
+| `DB_PASSWORD` | ✓ `db-password` | ✓ | ✓ | ✓ | Neon role password |
 | `REDIS_HOST` / `REDIS_PORT` / `REDIS_SSL` | | ✓ | ✓ | ✓ | `10.138.0.2` / `6379` / `false` |
 | `REDIS_PASSWORD` | ✓ `redis-password` | ✓ | ✓ | ✓ | from the VM's `redis.conf` |
 | `JWT_SECRET` | ✓ `jwt-secret` | ✓ | ✓ | ✓ | **same in all three** |
@@ -104,7 +104,7 @@ the value). Plain values go in `--set-env-vars`. `PORT` is set by Cloud Run; nev
 | `GOOGLE_CLIENT_ID` / `GITHUB_CLIENT_ID` | | ✓ | | | OAuth client IDs (both required: the service won't start with an empty one) |
 | `GOOGLE_CLIENT_SECRET` / `GITHUB_CLIENT_SECRET` | ✓ `google-client-secret`, `github-client-secret` | ✓ | | | |
 | `HASHIDS_SALT` | ✓ `hashids-salt` | | ✓ | | **never change it**: every existing short code would break |
-| `SAFE_BROWSING_API_KEY` | ✓ | | ✓ | | optional; without it link creation and the expander skip the Safe Browsing check |
+| `SAFE_BROWSING_API_KEY` | ✓ `safe-browsing-api-key` | | ✓ | | optional; without it link creation and the expander skip the Safe Browsing check |
 | `OAUTH2_REDIRECT_BASE_URL` | | (✓) | | | optional, defaults to `FRONTEND_URL` |
 | `JWT_EXPIRATION_MS` | | (✓) | | | optional, default `3600000` (1 hour) |
 | `DB_POOL_MAX_SIZE` | | (✓) | (✓) | (✓) | optional, default `5` |
@@ -224,7 +224,7 @@ Paste values with `read -rs` (hidden, not saved in shell history). After each `r
 **Paste the real value, never the `<...>` placeholder text**: that happened once and broke Redis auth.
 
 ```bash
-read -rs V && printf '%s' "$V" | gcloud secrets create DB_PASSWORD --data-file=-            # Neon password
+read -rs V && printf '%s' "$V" | gcloud secrets create db-password --data-file=-            # Neon password
 read -rs V && printf '%s' "$V" | gcloud secrets create redis-password --data-file=-         # from redis.conf
 read -rs V && printf '%s' "$V" | gcloud secrets create google-client-secret --data-file=-
 read -rs V && printf '%s' "$V" | gcloud secrets create github-client-secret --data-file=-
@@ -233,7 +233,7 @@ printf '%s' "$(openssl rand -base64 32)" | gcloud secrets create jwt-secret --da
 printf '%s' "$(openssl rand -base64 32)" | gcloud secrets create api-key-signing-secret --data-file=-
 printf '%s' "$(openssl rand -hex 16)"    | gcloud secrets create hashids-salt --data-file=-
 
-for s in DB_PASSWORD redis-password google-client-secret github-client-secret jwt-secret api-key-signing-secret hashids-salt; do
+for s in db-password redis-password google-client-secret github-client-secret jwt-secret api-key-signing-secret hashids-salt; do
   gcloud secrets add-iam-policy-binding $s --member=serviceAccount:$RUN_SA --role=roles/secretmanager.secretAccessor
 done
 ```
@@ -266,12 +266,12 @@ COMMON="--region=us-west1 --service-account=$RUN_SA --allow-unauthenticated --me
 gcloud run deploy user --image=us-west1-docker.pkg.dev/virallink-487806/virallink/user:v1 $COMMON \
   --min-instances=0 --max-instances=3 \
   --set-env-vars="SPRING_PROFILES_ACTIVE=prod,DB_URL=jdbc:postgresql://$NEON/virallink_user?sslmode=require,DB_USERNAME=neondb_owner,REDIS_HOST=10.138.0.2,REDIS_PORT=6379,REDIS_SSL=false,FRONTEND_URL=https://vilnk.vercel.app,GOOGLE_CLIENT_ID=<google client id>,GITHUB_CLIENT_ID=<github client id>" \
-  --set-secrets="DB_PASSWORD=DB_PASSWORD:latest,REDIS_PASSWORD=redis-password:latest,JWT_SECRET=jwt-secret:latest,API_KEY_SIGNING_SECRET=api-key-signing-secret:latest,GOOGLE_CLIENT_SECRET=google-client-secret:latest,GITHUB_CLIENT_SECRET=github-client-secret:latest"
+  --set-secrets="DB_PASSWORD=db-password:latest,REDIS_PASSWORD=redis-password:latest,JWT_SECRET=jwt-secret:latest,API_KEY_SIGNING_SECRET=api-key-signing-secret:latest,GOOGLE_CLIENT_SECRET=google-client-secret:latest,GITHUB_CLIENT_SECRET=github-client-secret:latest"
 
 gcloud run deploy redirect --image=us-west1-docker.pkg.dev/virallink-487806/virallink/redirect:v1 $COMMON \
   --min-instances=0 --max-instances=3 \
   --set-env-vars="SPRING_PROFILES_ACTIVE=prod,DB_URL=jdbc:postgresql://$NEON/virallink_redirect?sslmode=require,DB_USERNAME=neondb_owner,REDIS_HOST=10.138.0.2,REDIS_PORT=6379,REDIS_SSL=false" \
-  --set-secrets="DB_PASSWORD=DB_PASSWORD:latest,REDIS_PASSWORD=redis-password:latest,JWT_SECRET=jwt-secret:latest,API_KEY_SIGNING_SECRET=api-key-signing-secret:latest,HASHIDS_SALT=hashids-salt:latest"
+  --set-secrets="DB_PASSWORD=db-password:latest,REDIS_PASSWORD=redis-password:latest,JWT_SECRET=jwt-secret:latest,API_KEY_SIGNING_SECRET=api-key-signing-secret:latest,HASHIDS_SALT=hashids-salt:latest"
 ```
 
 Replace both `<...>` client IDs with the real values (no angle brackets: a leftover placeholder in `FRONTEND_URL`
@@ -386,7 +386,7 @@ gcloud run deploy analytics --image=us-west1-docker.pkg.dev/virallink-487806/vir
   --network=default --subnet=default --vpc-egress=private-ranges-only \
   --min-instances=0 --max-instances=1 --cpu-throttling \
   --set-env-vars="SPRING_PROFILES_ACTIVE=prod,DB_URL=jdbc:postgresql://$NEON/virallink_analytics?sslmode=require&reWriteBatchedInserts=true,DB_USERNAME=neondb_owner,REDIS_HOST=10.138.0.2,REDIS_PORT=6379,REDIS_SSL=false" \
-  --set-secrets="DB_PASSWORD=DB_PASSWORD:latest,REDIS_PASSWORD=redis-password:latest,JWT_SECRET=jwt-secret:latest,SPONGE_TRIGGER_TOKEN=sponge-trigger-token:latest"
+  --set-secrets="DB_PASSWORD=db-password:latest,REDIS_PASSWORD=redis-password:latest,JWT_SECRET=jwt-secret:latest,SPONGE_TRIGGER_TOKEN=sponge-trigger-token:latest"
 
 # The once-a-minute drain
 gcloud services enable cloudscheduler.googleapis.com
@@ -434,6 +434,8 @@ records geography as "Unknown". MaxMind's license requires attribution and keepi
 | curl shows Google's 404 robot page | typo `us-west.run.app` | `us-west1` |
 | curl prints nothing | missing `https://` | add it |
 | user service: every request 500, logs "Bad authority" | `FRONTEND_URL=https://<name>.vercel.app` left from the template | `gcloud run services update ... --update-env-vars` |
+| GitHub: "redirect_uri is not associated with this application" | the OAuth app's callback URL was still `localhost:8080` | set it to `https://vilnk.vercel.app/login/oauth2/code/github` (one callback per GitHub app) |
+| `Permission denied on secret ... db-password` | secret recreated under a new name; the runtime account had no access to it | `gcloud secrets add-iam-policy-binding <secret> --member=serviceAccount:virallink-run@… --role=roles/secretmanager.secretAccessor`, then `--update-secrets` on each service. Never delete a secret a service still references: its next cold start fails |
 | Login button goes to `localhost:8080` | domain served preview builds without Production variables | attach the domain to Production, redeploy without cache |
 | Vercel login wall in incognito | preview deployments are protected | same: the production domain is public |
 

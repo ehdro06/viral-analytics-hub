@@ -1,9 +1,11 @@
 package com.virallink.redirect.controller;
 
 import com.virallink.redirect.config.JwtAuthenticationFilter;
+import com.virallink.redirect.config.RateLimitConfig;
 import com.virallink.redirect.config.SecurityConfig;
 import com.virallink.redirect.model.Link;
 import com.virallink.redirect.service.LinkService;
+import com.virallink.redirect.service.RateLimiter;
 import com.virallink.redirect.service.LinkService.Resolution;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.io.Decoders;
@@ -38,7 +40,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @WebMvcTest(RedirectController.class)
-@Import({SecurityConfig.class, JwtAuthenticationFilter.class, RedirectControllerStatusTest.SecurityChainOnly.class})
+@Import({SecurityConfig.class, JwtAuthenticationFilter.class, RateLimitConfig.class, RedirectControllerStatusTest.SecurityChainOnly.class})
 @ActiveProfiles("test")
 class RedirectControllerStatusTest {
 
@@ -65,6 +67,9 @@ class RedirectControllerStatusTest {
 
     @MockitoBean
     private LinkService linkService;
+
+    @MockitoBean
+    private RateLimiter rateLimiter;
 
     private static String bearer(long userId) {
         return "Bearer " + Jwts.builder().claims(Map.of("userId", userId)).subject("u@example.com")

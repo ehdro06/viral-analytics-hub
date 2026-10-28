@@ -8,13 +8,16 @@ import { Input } from "@/components/ui/input";
 import DashboardLayout from "@/components/DashboardLayout";
 import LinksTable from "@/components/LinksTable";
 import LinkCreationDialog from "@/components/LinkCreationDialog";
+import LinkExpiryDialog from "@/components/LinkExpiryDialog";
+import { LinkItem } from "@/lib/types";
 import { useLinks } from "@/hooks/use-links";
 
 const messageOf = (err: unknown, fallback: string) => (err instanceof Error ? err.message : fallback);
 
 export default function LinksPage() {
-  const { links, isLoading, createLink, deleteLink } = useLinks();
+  const { links, isLoading, createLink, deleteLink, updateLinkStatus } = useLinks();
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [expiryLink, setExpiryLink] = useState<LinkItem | null>(null);
   const [search, setSearch] = useState("");
 
   const filtered = links.filter(
@@ -38,6 +41,24 @@ export default function LinksPage() {
       toast.success("Link deleted");
     } catch (err) {
       toast.error(messageOf(err, "Failed to delete link"));
+    }
+  };
+
+  const handleTogglePause = async (link: LinkItem) => {
+    try {
+      await updateLinkStatus({ id: link.id, paused: !link.paused, expiresAt: link.expiresAt });
+      toast.success(link.paused ? "Link resumed" : "Link paused");
+    } catch (err) {
+      toast.error(messageOf(err, "Failed to update link"));
+    }
+  };
+
+  const handleSaveExpiry = async (link: LinkItem, expiresAt: string | null) => {
+    try {
+      await updateLinkStatus({ id: link.id, paused: link.paused, expiresAt });
+      toast.success(expiresAt ? "Expiry saved" : "Expiry removed");
+    } catch (err) {
+      toast.error(messageOf(err, "Failed to update link"));
     }
   };
 
@@ -65,7 +86,15 @@ export default function LinksPage() {
           />
         </div>
 
-        <LinksTable links={filtered} isLoading={isLoading} onDelete={handleDelete} />
+        <LinksTable
+          links={filtered}
+          isLoading={isLoading}
+          onDelete={handleDelete}
+          onTogglePause={handleTogglePause}
+          onEditExpiry={setExpiryLink}
+        />
+
+        <LinkExpiryDialog link={expiryLink} onClose={() => setExpiryLink(null)} onSave={handleSaveExpiry} />
 
         <LinkCreationDialog
           open={dialogOpen}

@@ -9,7 +9,7 @@ Local development is unchanged: every setting falls back to its `localhost` valu
 |---|---|---|
 | Frontend | Vercel (Hobby), project `viral-analytics-hub` | `https://vilnk.vercel.app` |
 | user, redirect | Cloud Run, `us-west1`, project `virallink-487806` | `https://user-85302724166.us-west1.run.app`, `https://redirect-85302724166.us-west1.run.app` |
-| analytics | **not deployed yet** (see [Analytics](#analytics-not-deployed-yet)) | |
+| analytics | **not deployed yet**, ready to deploy on demand (see [Analytics](#analytics-not-deployed-yet)) | |
 | PostgreSQL | Neon, `aws-us-west-2`, branch `production` | databases `virallink_user`, `virallink_redirect`, `virallink_analytics` |
 | Redis | free `e2-micro` VM `virallink-redis`, `us-west1-b`, private IP only | `10.138.0.2:6379` |
 | Images | Artifact Registry `us-west1-docker.pkg.dev/virallink-487806/virallink` | `user:<tag>`, `redirect:<tag>` |
@@ -109,6 +109,8 @@ the value). Plain values go in `--set-env-vars`. `PORT` is set by Cloud Run; nev
 | `JWT_EXPIRATION_MS` | | (✓) | | | optional, default `3600000` (1 hour) |
 | `DB_POOL_MAX_SIZE` | | (✓) | (✓) | (✓) | optional, default `5` |
 | `GEOLITE_PATH` | | | | (✓) | set in the image; override when mounting the file |
+| `SPONGE_TRIGGER_TOKEN` | ✓ `sponge-trigger-token` | | | ✓ | shared with the Cloud Scheduler job; without it the drain endpoint is off |
+| `SPONGE_MODE` | | | | (✓) | `on-demand` in the prod profile, `poll` locally |
 
 Instead of the four `REDIS_*` values you can set one secret `SPRING_DATA_REDIS_URL` (`redis://:<password>@<host>:6379`).
 
@@ -363,10 +365,47 @@ Federation); with triggers in place it is not needed.
 
 ## Analytics (not deployed yet)
 
-Today analytics polls Redis every 500 ms, so on Cloud Run it would need an always-on instance with CPU always
-allocated (roughly $40-50/month). Planned change before deploying it: drain the click queue on demand (Cloud
-Scheduler once a minute, or a wake-up triggered by the first click), so it can scale to zero on request-based
-billing. Clicks queue safely in Redis until then (capped at 500,000).
+Analytics drains the click queue **on demand**: in production (`SPONGE_MODE=on-demand`, the prod-profile default)
+it does nothing until `POST /internal/sponge/drain` is called with the `X-Sponge-Token` header. Cloud Scheduler calls
+it once a minute, so the service runs on request-based billing and scales to zero like the others (an empty drain
+takes milliseconds and does not touch Neon). Dashboard numbers lag by up to a minute. Clicks wait safely in Redis
+between drains (capped at 500,000). Locally it still polls every 500 ms (`SPONGE_MODE=poll`, the default).
+
+```bash
+cd ~/viral-analytics-hub && git checkout main && git pull && TAG=$(git rev-parse --short HEAD)
+RUN_SA=virallink-run@virallink-487806.iam.gserviceaccount.com
+NEON=ep-misty-forest-arzle9a2.c-4.us-west-2.aws.neon.tech
+
+# Shared token between Cloud Scheduler and analytics (generated, never typed)
+printf '%s' "$(openssl rand -hex 32)" | gcloud secrets create sponge-trigger-token --data-file=-
+gcloud secrets add-iam-policy-binding sponge-trigger-token --member=serviceAccount:$RUN_SA --role=roles/secretmanager.secretAccessor
+
+gcloud builds submit ./analytics --tag us-west1-docker.pkg.dev/virallink-487806/virallink/analytics:$TAG
+gcloud run deploy analytics --image=us-west1-docker.pkg.dev/virallink-487806/virallink/analytics:$TAG \
+  --region=us-west1 --service-account=$RUN_SA --allow-unauthenticated --memory=1Gi --cpu=1 --cpu-boost \
+  --network=default --subnet=default --vpc-egress=private-ranges-only \
+  --min-instances=0 --max-instances=1 --cpu-throttling \
+  --set-env-vars="SPRING_PROFILES_ACTIVE=prod,DB_URL=jdbc:postgresql://$NEON/virallink_analytics?sslmode=require&reWriteBatchedInserts=true,DB_USERNAME=neondb_owner,REDIS_HOST=10.138.0.2,REDIS_PORT=6379,REDIS_SSL=false" \
+  --set-secrets="DB_PASSWORD=DB_PASSWORD:latest,REDIS_PASSWORD=redis-password:latest,JWT_SECRET=jwt-secret:latest,SPONGE_TRIGGER_TOKEN=sponge-trigger-token:latest"
+
+# The once-a-minute drain
+gcloud services enable cloudscheduler.googleapis.com
+ANALYTICS_URL=$(gcloud run services describe analytics --region=us-west1 --format='value(status.url)')
+gcloud scheduler jobs create http analytics-drain --location=us-west1 --schedule="* * * * *" \
+  --http-method=POST --uri="$ANALYTICS_URL/internal/sponge/drain" --attempt-deadline=120s \
+  --headers="X-Sponge-Token=$(gcloud secrets versions access latest --secret=sponge-trigger-token)"
+```
+
+Then on Vercel add `ANALYTICS_SERVICE_URL` = the analytics URL and redeploy without build cache, and add a
+`deploy-analytics` trigger like the others.
+
+Check: `gcloud scheduler jobs run analytics-drain --location=us-west1`, then in Cloud Scheduler the job's last run
+shows success; click a short link and within a minute the dashboard counts it.
+
+- `--max-instances=1`: the Redis consumer name is fixed, so two instances would double-count. A drain that is still
+  running when the next call arrives is skipped, not duplicated.
+- If you rotate the token: add a new secret version, redeploy analytics, and update the job
+  (`gcloud scheduler jobs update http analytics-drain --location=us-west1 --update-headers=X-Sponge-Token=...`).
 
 GeoLite2 (country/city): the `.mmdb` file must not go into git (MaxMind license). Plan: private bucket
 `gs://virallink-487806-geoip` in `us-west1`, mounted into analytics:
@@ -407,7 +446,8 @@ records geography as "Unknown". MaxMind's license requires attribution and keepi
 | Redis VM (one free-tier `e2-micro` + 30 GB standard disk) | $0 |
 | Cloud Run user + redirect, scale to zero, request-based | ~$0 at low traffic (free tier) |
 | Artifact Registry, Secret Manager, Cloud Build | cents at this scale |
-| analytics as an always-on instance (if deployed today) | ~$40-50 (avoid with the on-demand change) |
+| analytics, on demand (scale to zero, drained once a minute) | ~$0 at low traffic |
+| Cloud Scheduler (3 jobs free per billing account) | $0 |
 
 Set a budget alert: Billing → Budgets & alerts. It emails you; it does not stop spending. `--max-instances` caps
 how far each service can scale.

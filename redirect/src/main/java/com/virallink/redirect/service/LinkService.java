@@ -12,7 +12,9 @@ import org.springframework.transaction.support.TransactionTemplate;
 
 import java.net.URI;
 import java.net.URISyntaxException;
+import java.time.Instant;
 import java.util.List;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -31,6 +33,15 @@ public class LinkService {
     private final UrlExpandService urlExpandService;
     private final TransactionTemplate transactionTemplate;
     private final Hashids hashids;
+
+    /** Outcome of resolving a short code on the redirect hot path. */
+    public record Resolution(Kind kind, String longUrl) {
+        public enum Kind { REDIRECT, INACTIVE, NOT_FOUND }
+
+        static Resolution redirect(String longUrl) { return new Resolution(Kind.REDIRECT, longUrl); }
+        static final Resolution INACTIVE = new Resolution(Kind.INACTIVE, null);
+        static final Resolution NOT_FOUND = new Resolution(Kind.NOT_FOUND, null);
+    }
 
     /**
      * Create a short link.
@@ -59,7 +70,7 @@ public class LinkService {
         });
 
         // Hydrate the cache so the link works instantly (no first-click DB hit)
-        linkCache.put(link.getShortCode(), new LinkCache.Entry(link.getLongUrl(), link.getUserId()));
+        linkCache.put(link.getShortCode(), LinkCache.Entry.of(link));
         log.info("Created link: {} -> {}", link.getShortCode(), url);
         return link;
     }
@@ -69,20 +80,20 @@ public class LinkService {
      * 0. Reject codes that cannot possibly be ours (no Redis, no DB).
      * 1. Redis. A hit costs no database call.
      * 2. On a miss, PostgreSQL, then populate Redis (or remember the code as missing).
-     * A click is only recorded for links that exist.
+     * Paused or expired links resolve to INACTIVE. A click is only recorded for links that actually redirect.
      */
-    public Optional<String> resolveLink(String shortCode, String ipAddress, String userAgent, String referer) {
+    public Resolution resolveLink(String shortCode, String ipAddress, String userAgent, String referer) {
         if (!isWellFormed(shortCode)) {
-            return Optional.empty();
+            return Resolution.NOT_FOUND;
         }
 
         LinkCache.Lookup cached = linkCache.get(shortCode);
         switch (cached.status()) {
             case HIT -> {
-                return Optional.of(trackAndReturn(shortCode, cached.entry(), ipAddress, userAgent, referer));
+                return redirectIfActive(shortCode, cached.entry(), ipAddress, userAgent, referer);
             }
             case KNOWN_MISSING -> {
-                return Optional.empty();
+                return Resolution.NOT_FOUND;
             }
             default -> { /* unknown: fall through to the database */ }
         }
@@ -90,12 +101,33 @@ public class LinkService {
         Optional<Link> found = linkRepository.findByShortCode(shortCode);
         if (found.isEmpty()) {
             linkCache.putMissing(shortCode);
-            return Optional.empty();
+            return Resolution.NOT_FOUND;
         }
 
-        LinkCache.Entry entry = new LinkCache.Entry(found.get().getLongUrl(), found.get().getUserId());
+        LinkCache.Entry entry = LinkCache.Entry.of(found.get());
         linkCache.put(shortCode, entry);
-        return Optional.of(trackAndReturn(shortCode, entry, ipAddress, userAgent, referer));
+        return redirectIfActive(shortCode, entry, ipAddress, userAgent, referer);
+    }
+
+    /**
+     * Pause/resume a link and set or clear its expiry (owner only). Returns empty if the link does not exist or
+     * belongs to someone else. A new expiry must lie in the future; an unchanged one may already have passed, so an
+     * expired link can still be paused or resumed.
+     */
+    public Optional<Link> updateStatus(Long id, Long userId, boolean paused, Instant expiresAt) {
+        Optional<Link> updated = transactionTemplate.execute(status ->
+                linkRepository.findByIdAndUserId(id, userId).map(link -> {
+                    if (expiresAt != null && !Objects.equals(expiresAt, link.getExpiresAt())
+                            && !expiresAt.isAfter(Instant.now())) {
+                        throw new IllegalArgumentException("The expiry date must be in the future");
+                    }
+                    link.setPaused(paused);
+                    link.setExpiresAt(expiresAt);
+                    return linkRepository.save(link);
+                }));
+        // Refresh the cache after the commit, so the next click sees the new status immediately
+        updated.ifPresent(link -> linkCache.put(link.getShortCode(), LinkCache.Entry.of(link)));
+        return updated;
     }
 
     public List<Link> getLinksByUserId(Long userId) {
@@ -125,9 +157,12 @@ public class LinkService {
         });
     }
 
-    private String trackAndReturn(String shortCode, LinkCache.Entry entry, String ip, String userAgent, String referer) {
+    private Resolution redirectIfActive(String shortCode, LinkCache.Entry entry, String ip, String userAgent, String referer) {
+        if (!entry.activeAt(Instant.now())) {
+            return Resolution.INACTIVE;
+        }
         analyticsService.trackClick(shortCode, entry.ownerId(), ip, userAgent, referer);
-        return entry.longUrl();
+        return Resolution.redirect(entry.longUrl());
     }
 
     /** A code is ours only if it decodes to exactly one id and re-encodes to the same string. */

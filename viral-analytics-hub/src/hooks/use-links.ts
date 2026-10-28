@@ -1,5 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuthStore } from "./use-auth-store";
+import { authFetch } from "@/lib/auth-fetch";
 import { LinkItem } from "@/lib/types";
 
 // Shape returned by the redirect service
@@ -34,9 +35,7 @@ export function useLinks() {
   const { data: links = [], isPending } = useQuery({
     queryKey: ["links"],
     queryFn: async () => {
-      const res = await fetch("/api/v1/links", {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      const res = await authFetch("/api/v1/links");
       if (!res.ok) throw new Error("Failed to fetch links");
       const data: BackendLink[] = await res.json();
       return data.map(mapBackendToFrontend);
@@ -50,12 +49,9 @@ export function useLinks() {
   // Create (optimistic: the row appears immediately and is replaced by the real one on success)
   const createMutation = useMutation({
     mutationFn: async (originalUrl: string) => {
-      const res = await fetch("/api/v1/links", {
+      const res = await authFetch("/api/v1/links", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ longUrl: originalUrl }),
       });
       if (!res.ok) throw await errorFrom(res, "Failed to create link");
@@ -92,10 +88,7 @@ export function useLinks() {
   // Delete (optimistic)
   const deleteMutation = useMutation({
     mutationFn: async (id: string) => {
-      const res = await fetch(`/api/v1/links/${id}`, {
-        method: "DELETE",
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      const res = await authFetch(`/api/v1/links/${id}`, { method: "DELETE" });
       if (!res.ok) throw await errorFrom(res, "Failed to delete link");
     },
     onMutate: async (deletedId) => {

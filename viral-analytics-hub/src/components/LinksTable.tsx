@@ -1,7 +1,7 @@
 import { LinkItem } from "@/lib/types";
 import { shortLinkLabel, shortLinkUrl } from "@/lib/short-link";
 import { motion } from "framer-motion";
-import { ExternalLink, Copy, MoreHorizontal, Trash2 } from "lucide-react";
+import { ExternalLink, Copy, MoreHorizontal, Trash2, Pause, Play, CalendarClock } from "lucide-react";
 import { toast } from "sonner";
 import {
   DropdownMenu,
@@ -14,12 +14,42 @@ interface LinksTableProps {
   links: LinkItem[];
   isLoading?: boolean;
   onDelete?: (id: string) => void;
+  onTogglePause?: (link: LinkItem) => void;
+  onEditExpiry?: (link: LinkItem) => void;
 }
 
 const formatDate = (iso: string) =>
   new Date(iso).toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" });
 
-export default function LinksTable({ links, isLoading = false, onDelete }: LinksTableProps) {
+const formatDateTime = (iso: string) =>
+  new Date(iso).toLocaleString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
+
+const STATUS_STYLES: Record<LinkItem["status"], string> = {
+  active: "bg-emerald-500/10 text-emerald-400",
+  paused: "bg-amber-500/10 text-amber-400",
+  expired: "bg-muted text-muted-foreground",
+};
+
+function StatusBadge({ link }: { link: LinkItem }) {
+  return (
+    <div className="flex flex-col items-start gap-0.5">
+      <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium capitalize ${STATUS_STYLES[link.status]}`}>
+        {link.status}
+      </span>
+      {link.expiresAt && link.status !== "expired" && (
+        <span className="text-[11px] text-muted-foreground">until {formatDateTime(link.expiresAt)}</span>
+      )}
+    </div>
+  );
+}
+
+export default function LinksTable({
+  links,
+  isLoading = false,
+  onDelete,
+  onTogglePause,
+  onEditExpiry,
+}: LinksTableProps) {
   const copyLink = (code: string) => {
     navigator.clipboard
       .writeText(shortLinkUrl(code))
@@ -60,6 +90,9 @@ export default function LinksTable({ links, isLoading = false, onDelete }: Links
               <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-5 py-3">
                 Destination
               </th>
+              <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-5 py-3">
+                Status
+              </th>
               <th className="text-right text-xs font-medium text-muted-foreground uppercase tracking-wider px-5 py-3">
                 Clicks
               </th>
@@ -98,6 +131,7 @@ export default function LinksTable({ links, isLoading = false, onDelete }: Links
                     <ExternalLink className="w-3 h-3 text-muted-foreground/50 shrink-0" />
                   </div>
                 </td>
+                <td className="px-5 py-3.5">{!link.pending && <StatusBadge link={link} />}</td>
                 <td className="px-5 py-3.5 text-right">
                   <span className="font-mono text-sm text-foreground">
                     {link.totalClicks.toLocaleString()}
@@ -121,6 +155,14 @@ export default function LinksTable({ links, isLoading = false, onDelete }: Links
                         <DropdownMenuItem onClick={() => copyLink(link.shortCode)}>
                           <Copy className="mr-2 h-4 w-4" />
                           <span>Copy Link</span>
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => onTogglePause?.(link)}>
+                          {link.paused ? <Play className="mr-2 h-4 w-4" /> : <Pause className="mr-2 h-4 w-4" />}
+                          <span>{link.paused ? "Resume" : "Pause"}</span>
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => onEditExpiry?.(link)}>
+                          <CalendarClock className="mr-2 h-4 w-4" />
+                          <span>{link.expiresAt ? "Change expiry" : "Set expiry"}</span>
                         </DropdownMenuItem>
                         <DropdownMenuItem
                           className="text-destructive focus:text-destructive"
@@ -163,15 +205,32 @@ export default function LinksTable({ links, isLoading = false, onDelete }: Links
                 )}
               </div>
               {!link.pending && (
-                <button
-                  onClick={() => onDelete?.(link.id)}
-                  aria-label="Delete link"
-                  className="p-1 rounded hover:bg-secondary text-muted-foreground hover:text-destructive"
-                >
-                  <Trash2 className="w-4 h-4" />
-                </button>
+                <div className="flex items-center gap-1">
+                  <button
+                    onClick={() => onTogglePause?.(link)}
+                    aria-label={link.paused ? "Resume link" : "Pause link"}
+                    className="p-1 rounded hover:bg-secondary text-muted-foreground hover:text-foreground"
+                  >
+                    {link.paused ? <Play className="w-4 h-4" /> : <Pause className="w-4 h-4" />}
+                  </button>
+                  <button
+                    onClick={() => onEditExpiry?.(link)}
+                    aria-label="Link expiry"
+                    className="p-1 rounded hover:bg-secondary text-muted-foreground hover:text-foreground"
+                  >
+                    <CalendarClock className="w-4 h-4" />
+                  </button>
+                  <button
+                    onClick={() => onDelete?.(link.id)}
+                    aria-label="Delete link"
+                    className="p-1 rounded hover:bg-secondary text-muted-foreground hover:text-destructive"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                </div>
               )}
             </div>
+            {!link.pending && <StatusBadge link={link} />}
             <p className="text-xs text-muted-foreground truncate">{link.originalUrl}</p>
             <div className="flex items-center justify-between">
               <span className="text-xs text-muted-foreground">{formatDate(link.createdAt)}</span>

@@ -1,4 +1,3 @@
-# syntax=docker/dockerfile:1
 # User service image for Cloud Run. Build context = this directory:
 #   docker build -t virallink-user ./user
 # Configuration comes only from environment variables at run time (see docs/DEPLOY.md); nothing secret is baked in.
@@ -11,9 +10,9 @@ COPY gradlew settings.gradle build.gradle ./
 COPY gradle gradle
 COPY src src
 
-# Tests are skipped here: CI runs them (.github/workflows/ci.yml). The cache mount only speeds up local rebuilds.
-RUN --mount=type=cache,target=/root/.gradle \
-    chmod +x gradlew \
+# Tests are skipped here: CI runs them (.github/workflows/ci.yml). No BuildKit-only syntax (e.g. RUN --mount), so
+# the file also builds with the classic builder, which plain `gcloud builds submit --tag` uses.
+RUN chmod +x gradlew \
  && ./gradlew --no-daemon bootJar -x test \
  && java -Djarmode=tools -jar build/libs/*.jar extract --layers --destination extracted --application-filename app.jar
 

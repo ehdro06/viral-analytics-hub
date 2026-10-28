@@ -9,6 +9,10 @@ import jakarta.servlet.http.HttpServletRequest;
 
 import com.virallink.redirect.model.Link;
 import com.virallink.redirect.service.LinkService;
+import com.virallink.redirect.service.RateLimiter;
+import com.virallink.redirect.config.RateLimitConfig.RateLimits;
+
+import java.time.Duration;
 
 import java.net.URI;
 import java.util.Optional;
@@ -22,6 +26,8 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 public class RedirectController {
 
     private final LinkService linkService;
+    private final RateLimiter rateLimiter;
+    private final RateLimits limits;
 
     @GetMapping("/{shortCode}")
     public ResponseEntity<Void> redirect(@PathVariable("shortCode") String shortCode, HttpServletRequest request) {
@@ -49,6 +55,11 @@ public class RedirectController {
     @PostMapping("/api/v1/links")
     public ResponseEntity<LinkResponse> createLink(@RequestBody LinkRequest request, 
                                                    @AuthenticationPrincipal Long userId) {
+        String user = String.valueOf(userId);
+        rateLimiter.check("links-minute", user, limits.linksPerMinute(), Duration.ofMinutes(1),
+                "You're creating links too quickly. Please wait a minute and try again.");
+        rateLimiter.check("links-day", user, limits.linksPerDay(), Duration.ofDays(1),
+                "You've reached today's link limit. Please try again tomorrow.");
         Link link = linkService.createLink(request.longUrl(), userId);
         return ResponseEntity.ok(new LinkResponse(link.getShortCode(), link.getLongUrl()));
     }

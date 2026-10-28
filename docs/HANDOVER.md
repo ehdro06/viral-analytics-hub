@@ -120,8 +120,8 @@ Neon (`aws-us-west-2`), Redis on a free `e2-micro` VM. Analytics is **not** depl
 Done since the original handover: 1-hour JWT with silent renewal (#5), redirect answers 401 (#2), robots.txt (#3).
 
 ### Next (decided)
-- **Analytics without an always-on instance:** replace the 500 ms polling with an on-demand drain (Cloud Scheduler
-  every minute, or click-triggered via Cloud Tasks), scale to zero, request-based billing. Then deploy analytics.
+- **Deploy analytics:** on-demand drain is built (Cloud Scheduler every minute, scale to zero); steps in
+  [DEPLOY.md](./DEPLOY.md#analytics-not-deployed-yet).
 - **Link status management:** owner can pause a link or set an expiry; paused/expired links stop redirecting.
   Replaces the hardcoded `active` badge (`use-links.ts`).
 - **Automatic backend deploys:** Cloud Build triggers per service using `cloudbuild.yaml` ([DEPLOY.md](./DEPLOY.md#automatic-deploys-cloud-build-triggers)).

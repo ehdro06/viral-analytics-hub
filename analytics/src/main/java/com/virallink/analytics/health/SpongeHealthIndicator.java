@@ -3,6 +3,7 @@ package com.virallink.analytics.health;
 import com.virallink.analytics.service.AnalyticsSpongeService;
 import lombok.RequiredArgsConstructor;
 
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.health.contributor.Health;
 import org.springframework.boot.health.contributor.HealthIndicator;
 import org.springframework.stereotype.Component;
@@ -10,7 +11,9 @@ import org.springframework.stereotype.Component;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 
+// Only meaningful in polling mode: on demand, minutes without a run are normal.
 @Component
+@ConditionalOnProperty(name = "analytics.sponge.mode", havingValue = "poll", matchIfMissing = true)
 @RequiredArgsConstructor
 public class SpongeHealthIndicator implements HealthIndicator {
 

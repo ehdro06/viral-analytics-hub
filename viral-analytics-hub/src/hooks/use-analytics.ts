@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { useAuthStore } from "./use-auth-store";
+import { authFetch } from "@/lib/auth-fetch";
 import { AnalyticsData } from "@/lib/types";
 
 const POLL_INTERVAL_MS = 5000;
@@ -15,9 +16,7 @@ export function useAnalytics() {
     refetchIntervalInBackground: false,
     retry: 1,
     queryFn: async () => {
-      const res = await fetch("/api/v1/analytics/summary", {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      const res = await authFetch("/api/v1/analytics/summary");
       if (!res.ok) throw new Error(`Analytics request failed (${res.status})`);
       return res.json();
     },

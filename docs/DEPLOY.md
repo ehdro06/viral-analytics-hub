@@ -1,24 +1,38 @@
 # Deploying Virallink
 
-Target: **frontend on Vercel**, **PostgreSQL on Neon**, the **three Spring Boot services on Google Cloud Run**, and a
-**Redis** whose provider is still open (see [Redis options](#redis-options)). Nothing in the repo deploys
-automatically: the deploy workflow is manual (`workflow_dispatch`) and needs the one-time setup below.
+How the live setup is built, step by step, with the exact commands that worked and the pitfalls hit on the way.
+Local development is unchanged: every setting falls back to its `localhost` value ([LOCAL_DEV.md](./LOCAL_DEV.md)).
 
-Local development is unchanged: every new setting falls back to today's `localhost` value. See [LOCAL_DEV.md](./LOCAL_DEV.md).
+**Live setup (Oct 2026)**
+
+| Piece | Where | Address / name |
+|---|---|---|
+| Frontend | Vercel (Hobby), project `viral-analytics-hub` | `https://vilnk.vercel.app` |
+| user, redirect | Cloud Run, `us-west1`, project `virallink-487806` | `https://user-85302724166.us-west1.run.app`, `https://redirect-85302724166.us-west1.run.app` |
+| analytics | **not deployed yet** (see [Analytics](#analytics-not-deployed-yet)) | |
+| PostgreSQL | Neon, `aws-us-west-2`, branch `production` | databases `virallink_user`, `virallink_redirect`, `virallink_analytics` |
+| Redis | free `e2-micro` VM `virallink-redis`, `us-west1-b`, private IP only | `10.138.0.2:6379` |
+| Images | Artifact Registry `us-west1-docker.pkg.dev/virallink-487806/virallink` | `user:<tag>`, `redirect:<tag>` |
+| Secrets | Secret Manager | see [Secrets](#secrets) |
+
+Everything sits in **Oregon** (`us-west1` / Neon `aws-us-west-2`): the closest free-tier VM region to Korea, and
+Cloud Run, Redis and the database stay next to each other.
 
 - [Architecture](#architecture)
-- [What the repo provides](#what-the-repo-provides)
-- [Order of operations](#order-of-operations)
 - [Environment variables](#environment-variables)
-- [Neon (PostgreSQL)](#neon-postgresql)
-- [Redis options](#redis-options)
-- [OAuth (Google, GitHub)](#oauth-google-github)
-- [Cloud Run](#cloud-run)
-- [Vercel](#vercel)
-- [GeoLite2 (analytics)](#geolite2-analytics)
-- [CI/CD (GitHub Actions + Workload Identity Federation)](#cicd-github-actions--workload-identity-federation)
-- [Smoke test after deploy](#smoke-test-after-deploy)
-- [Known risks and open items](#known-risks-and-open-items)
+- [1. Neon](#1-neon)
+- [2. Redis on a free VM](#2-redis-on-a-free-vm)
+- [3. OAuth apps](#3-oauth-apps)
+- [4. GCP setup and secrets](#4-gcp-setup-and-secrets)
+- [5. Build and deploy the services](#5-build-and-deploy-the-services)
+- [6. Vercel](#6-vercel)
+- [7. Check it works](#7-check-it-works)
+- [Updating a service](#updating-a-service)
+- [Automatic deploys (Cloud Build triggers)](#automatic-deploys-cloud-build-triggers)
+- [Analytics (not deployed yet)](#analytics-not-deployed-yet)
+- [Pitfalls we hit](#pitfalls-we-hit)
+- [Cost](#cost)
+- [Known risks](#known-risks)
 
 ---
 
@@ -33,22 +47,22 @@ flowchart LR
     Next["Next.js<br/>pages + rewrites"]
   end
 
-  subgraph run [Google Cloud Run]
+  subgraph run [Cloud Run us-west1]
     User["user<br/>OAuth, sessions, JWT"]
     Redirect["redirect<br/>302 hot path, links, expander"]
-    Analytics["analytics<br/>stream consumer, summaries"]
+    Analytics["analytics<br/>(not deployed yet)"]
   end
 
-  subgraph neon [Neon]
+  subgraph neon [Neon aws-us-west-2]
     DBU[(virallink_user)]
     DBR[(virallink_redirect)]
     DBA[(virallink_analytics)]
   end
 
-  Redis[("Redis<br/>sessions, link cache,<br/>stream analytics:events")]
+  Redis[("Redis on e2-micro VM<br/>private IP, same VPC")]
   IdP([Google / GitHub OAuth])
 
-  Browser -->|"https://app.vercel.app<br/>/api/*, /oauth2/*, /login/oauth2/*, /logout"| Next
+  Browser -->|"https://vilnk.vercel.app<br/>/api/*, /oauth2/*, /login/oauth2/*, /logout"| Next
   Browser -->|"short link GET /{code}"| Redirect
   Script --> Redirect
   Next -->|rewrite| User
@@ -57,479 +71,354 @@ flowchart LR
   User --> DBU
   Redirect --> DBR
   Analytics --> DBA
-  User -->|Spring Session| Redis
-  Redirect -->|"cache + XADD"| Redis
-  Analytics -->|"XREADGROUP analytics-group"| Redis
+  User -->|sessions| Redis
+  Redirect -->|"link cache + click stream"| Redis
+  Analytics -->|"reads click stream"| Redis
   Browser <-->|login| IdP
   User <-->|token exchange| IdP
 ```
 
-Key points:
-
-- **The browser only talks to the Vercel origin** (plus the redirect service for short links). API calls, the OAuth
-  start (`/oauth2/authorization/*`) and the OAuth callback (`/login/oauth2/code/*`) all go through the Next.js
-  rewrites in `viral-analytics-hub/next.config.ts`. That keeps the user service's `SESSION` cookie first-party on
-  the Vercel domain, which is what `GET /api/v1/users/me` (session -> JWT) needs.
-- Short links are served **directly** by the redirect service (its Cloud Run URL or a custom domain mapped to it),
-  not through Vercel: lower latency, and the redirect service sees the real client IP.
-- redirect and analytics share one Redis: redirect `XADD`s click events to `analytics:events`, analytics consumes them
-  with the consumer group `analytics-group` and writes aggregates to Postgres.
-
-## What the repo provides
-
-| File | Purpose |
-|------|---------|
-| `*/src/main/resources/application.properties` | `${DB_URL}`, `${DB_USERNAME}`, `${DB_PASSWORD}`, `${REDIS_HOST}`, `${REDIS_PORT}`, `${REDIS_PASSWORD}`, `${REDIS_SSL}`, `${PORT}`, all with local defaults |
-| `*/src/main/resources/application-prod.properties` | `SPRING_PROFILES_ACTIVE=prod`: small Hikari pool, no DEBUG logging, short shutdown, user: pinned OAuth redirect URI + Secure cookie |
-| `user/Dockerfile`, `redirect/Dockerfile`, `analytics/Dockerfile` (+ `.dockerignore`) | Multi-stage: `eclipse-temurin:25-jdk-noble` builds with the service's `gradlew`, `eclipse-temurin:25-jre-noble` runs as non-root uid 10001 |
-| `analytics/geoip/README.md` | Where the (git-ignored) GeoLite2 database goes |
-| `.github/workflows/deploy-cloud-run.yml` | Manual build -> Artifact Registry -> Cloud Run, authenticated with Workload Identity Federation |
-| `viral-analytics-hub/.env.example` | Vercel environment variables |
-
-Images take **all configuration from environment variables at run time**; `.env`, `gradle.properties` and secrets are
-excluded by `.dockerignore` and never copied. Docker builds skip tests (`-x test`); CI (`ci.yml`) runs them.
-
-## Order of operations
-
-1. **Pick names.** GCP project + region (e.g. `europe-west1`), the Vercel project name (gives `https://<project>.vercel.app`).
-2. **Neon:** create the project and the three databases ([Neon](#neon-postgresql)).
-3. **Redis:** provision it ([Redis options](#redis-options)).
-4. **OAuth:** register the redirect URIs on the *Vercel* origin ([OAuth](#oauth-google-github)).
-5. **GCP:** enable APIs, Artifact Registry, runtime service account, Secret Manager secrets ([Cloud Run](#cloud-run)).
-6. **Build + first deploy** of user, redirect, analytics with all env vars and secrets. Note the three service URLs.
-7. **Vercel:** import the repo (root `viral-analytics-hub`), set its env vars to those URLs, deploy ([Vercel](#vercel)).
-8. **Optional:** set up WIF so later deploys are one click ([CI/CD](#cicd-github-actions--workload-identity-federation)).
-9. [Smoke test](#smoke-test-after-deploy).
-
-Cloud Run URLs are known after step 6 and the Vercel URL is predictable before its first deploy, so there is no
-cycle. If you later add a custom domain on Vercel, update `FRONTEND_URL`, `NEXT_PUBLIC_API_BASE_URL` and both OAuth
-redirect URIs, then redeploy.
+- **The browser only talks to `vilnk.vercel.app`** (plus the redirect service for short links). Vercel forwards
+  `/api/*`, `/oauth2/*`, `/login/oauth2/*` and `/logout` to the services (`viral-analytics-hub/next.config.ts`).
+  That keeps the login cookie (`SESSION`) on the Vercel domain, where the dashboard can use it. Login must start and
+  return through Vercel; see [Pitfalls](#pitfalls-we-hit).
+- Short links go **directly** to the redirect service: faster, and it sees the visitor's real IP.
+- Cloud Run reaches Redis over the VPC (Direct VPC egress); the VM has no public IP.
 
 ## Environment variables
 
-Secret = store in **Secret Manager** and attach with `--set-secrets`, never `--set-env-vars`. `PORT` is injected by
-Cloud Run; do not set it.
+Secrets live in **Secret Manager** and are attached with `--set-secrets` (the command only names the secret, never
+the value). Plain values go in `--set-env-vars`. `PORT` is set by Cloud Run; never set it.
 
-### All three services
+| Variable | Secret | user | redirect | analytics | Value |
+|---|:-:|:-:|:-:|:-:|---|
+| `SPRING_PROFILES_ACTIVE` | | ✓ | ✓ | ✓ | `prod` |
+| `DB_URL` | | ✓ | ✓ | ✓ | `jdbc:postgresql://<neon host>/virallink_<service>?sslmode=require` (analytics: add `&reWriteBatchedInserts=true`) |
+| `DB_USERNAME` | | ✓ | ✓ | ✓ | `neondb_owner` |
+| `DB_PASSWORD` | ✓ `DB_PASSWORD` | ✓ | ✓ | ✓ | Neon role password |
+| `REDIS_HOST` / `REDIS_PORT` / `REDIS_SSL` | | ✓ | ✓ | ✓ | `10.138.0.2` / `6379` / `false` |
+| `REDIS_PASSWORD` | ✓ `redis-password` | ✓ | ✓ | ✓ | from the VM's `redis.conf` |
+| `JWT_SECRET` | ✓ `jwt-secret` | ✓ | ✓ | ✓ | **same in all three** |
+| `API_KEY_SIGNING_SECRET` | ✓ `api-key-signing-secret` | ✓ | ✓ | | **same in user and redirect** |
+| `FRONTEND_URL` | | ✓ | | | `https://vilnk.vercel.app` (no trailing slash) |
+| `GOOGLE_CLIENT_ID` / `GITHUB_CLIENT_ID` | | ✓ | | | OAuth client IDs (both required: the service won't start with an empty one) |
+| `GOOGLE_CLIENT_SECRET` / `GITHUB_CLIENT_SECRET` | ✓ `google-client-secret`, `github-client-secret` | ✓ | | | |
+| `HASHIDS_SALT` | ✓ `hashids-salt` | | ✓ | | **never change it**: every existing short code would break |
+| `SAFE_BROWSING_API_KEY` | ✓ | | ✓ | | optional; without it link creation and the expander skip the Safe Browsing check |
+| `OAUTH2_REDIRECT_BASE_URL` | | (✓) | | | optional, defaults to `FRONTEND_URL` |
+| `JWT_EXPIRATION_MS` | | (✓) | | | optional, default `3600000` (1 hour) |
+| `DB_POOL_MAX_SIZE` | | (✓) | (✓) | (✓) | optional, default `5` |
+| `GEOLITE_PATH` | | | | (✓) | set in the image; override when mounting the file |
 
-| Variable | Secret | Value |
-|----------|:------:|-------|
-| `SPRING_PROFILES_ACTIVE` | | `prod` |
-| `DB_URL` | | per service, see below. Neon **direct** host, `?sslmode=require` |
-| `DB_USERNAME` | | Neon role |
-| `DB_PASSWORD` | yes | Neon role password |
-| `DB_POOL_MAX_SIZE` | | optional, default `5` (prod profile) |
-| `REDIS_HOST` / `REDIS_PORT` | | provider host / port |
-| `REDIS_PASSWORD` | yes | empty = no AUTH |
-| `REDIS_SSL` | | `true` for any Redis reached over the internet (Upstash) |
-| `JWT_SECRET` | yes | **must be identical in user, redirect and analytics.** Base64, >= 32 bytes (`openssl rand -base64 32`) |
+Instead of the four `REDIS_*` values you can set one secret `SPRING_DATA_REDIS_URL` (`redis://:<password>@<host>:6379`).
 
-Instead of `REDIS_HOST/PORT/PASSWORD/SSL` you can set **`SPRING_DATA_REDIS_URL`** (supported by Spring Boot 4.1.1,
-the version in `build.gradle`): `rediss://default:<password>@<host>:<port>` (`rediss` = TLS). It takes precedence
-over the individual properties. Store it as a secret because it contains the password.
-
-### user
-
-| Variable | Secret | Value |
-|----------|:------:|-------|
-| `DB_URL` | | `jdbc:postgresql://<neon-direct-host>/virallink_user?sslmode=require` |
-| `API_KEY_SIGNING_SECRET` | yes | **must be identical in user and redirect** (user signs API keys, redirect verifies them) |
-| `FRONTEND_URL` | | `https://<project>.vercel.app`, no trailing slash. Used for CORS, post-login/logout/failure redirects, and as the OAuth redirect base |
-| `OAUTH2_REDIRECT_BASE_URL` | | optional; defaults to `FRONTEND_URL`. Must be the origin the browser sees |
-| `GOOGLE_CLIENT_ID` | | Google OAuth client |
-| `GOOGLE_CLIENT_SECRET` | yes | |
-| `GITHUB_CLIENT_ID` | | GitHub OAuth app (prod app) |
-| `GITHUB_CLIENT_SECRET` | yes | |
-
-Both OAuth registrations are **mandatory** as configured today: Spring Boot refuses to start with an empty client id.
-To ship with only one provider, remove the other provider's lines from `user/.../application.properties`.
-
-### redirect
-
-| Variable | Secret | Value |
-|----------|:------:|-------|
-| `DB_URL` | | `jdbc:postgresql://<neon-direct-host>/virallink_redirect?sslmode=require` |
-| `API_KEY_SIGNING_SECRET` | yes | same as user |
-| `HASHIDS_SALT` | yes | `openssl rand -hex 16`. **Never change it** after launch: it invalidates every short code |
-| `SAFE_BROWSING_API_KEY` | yes | optional; empty disables the expander's safety check |
-| `SAFE_BROWSING_ENABLED` | | optional, default `true` |
-
-### analytics
-
-| Variable | Secret | Value |
-|----------|:------:|-------|
-| `DB_URL` | | `jdbc:postgresql://<neon-direct-host>/virallink_analytics?sslmode=require&reWriteBatchedInserts=true` (keep `reWriteBatchedInserts`: the sponge's batch inserts rely on it) |
-| `GEOLITE_PATH` | | already set in the image to `/app/geoip/GeoLite2-City.mmdb`; override if you mount the file elsewhere |
-
-analytics reads only `JWT_SECRET` for auth. It does **not** read `API_KEY_SIGNING_SECRET`, so `X-API-Key` works on
-redirect only (LOCAL_DEV/HANDOVER previously said otherwise).
-
-### Must match across services
-
-| Value | Where |
-|-------|-------|
-| `JWT_SECRET` | user, redirect, analytics. A mismatch = silent 401s on redirect/analytics |
-| `API_KEY_SIGNING_SECRET` | user, redirect |
-| Redis instance | redirect and analytics must use the **same** Redis (the stream). user can use the same one |
-| `FRONTEND_URL` (user) = `NEXT_PUBLIC_API_BASE_URL` (Vercel) = OAuth redirect URI origin | one public origin |
-
-### Vercel (frontend)
-
-All non-secret, all read at **build time** (changing one needs a redeploy). No trailing slashes.
+**Vercel** (Project → Settings → Environment Variables, environment **Production**, not "Sensitive"; all are public
+URLs and are read at **build time**, so changes need a redeploy):
 
 | Variable | Value |
-|----------|-------|
-| `NEXT_PUBLIC_API_BASE_URL` | `https://<project>.vercel.app`: the Vercel origin itself, **not** the user service (see [Vercel](#vercel)) |
-| `NEXT_PUBLIC_SHORT_LINK_BASE_URL` | redirect service URL, or your short domain mapped to it |
-| `USER_SERVICE_URL` | `https://user-<hash>-<region>.a.run.app` (or `https://user-<project-number>.<region>.run.app`) |
-| `REDIRECT_SERVICE_URL` | redirect Cloud Run URL |
-| `ANALYTICS_SERVICE_URL` | analytics Cloud Run URL |
+|---|---|
+| `NEXT_PUBLIC_API_BASE_URL` | `https://vilnk.vercel.app` (**the Vercel site itself**, not the user service) |
+| `NEXT_PUBLIC_SHORT_LINK_BASE_URL` | `https://redirect-85302724166.us-west1.run.app` |
+| `USER_SERVICE_URL` | `https://user-85302724166.us-west1.run.app` |
+| `REDIRECT_SERVICE_URL` | `https://redirect-85302724166.us-west1.run.app` |
+| `ANALYTICS_SERVICE_URL` | add once analytics is deployed |
 
-## Neon (PostgreSQL)
+## 1. Neon
 
-`infra/postgres/init-db.sh` only runs inside `docker compose`, so on Neon you create the databases yourself.
+1. Create a project in **AWS us-west-2 (Oregon)**.
+2. **Databases → Add database** three times: `virallink_user`, `virallink_redirect`, `virallink_analytics`, owner
+   `neondb_owner`. Copy-paste the names (a typo, `virallink_redierct`, cost us a failed deploy).
+3. **Connect**, with **Connection pooling off** (direct connection): note the host (`ep-…us-west-2.aws.neon.tech`),
+   the role and the password. Never paste the full connection string anywhere public: it contains the password.
 
-1. Create a Neon project in the region closest to your Cloud Run region (Neon runs on AWS/Azure: e.g. Cloud Run
-   `europe-west3` Frankfurt <-> Neon `aws-eu-central-1`; `us-east4` <-> `aws-us-east-1`). Every query crosses clouds.
-2. Create the databases, either in the console (Databases -> New database) or with `psql` on the **direct** connection
-   string (Dashboard -> Connect, untick "Connection pooling"):
+Tables are created by the services on first start (`ddl-auto=update`; see [Known risks](#known-risks)). Use the
+direct host: the services run schema changes at startup, which a pooled connection handles badly, and the pools are
+small (5 per instance).
 
-   ```bash
-   psql "postgresql://<role>:<password>@<endpoint>.<region>.aws.neon.tech/neondb?sslmode=require" <<'SQL'
-   CREATE DATABASE virallink_user;
-   CREATE DATABASE virallink_redirect;
-   CREATE DATABASE virallink_analytics;
-   SQL
-   ```
+## 2. Redis on a free VM
 
-   One role owning all three is simplest; per-service roles (each owning its own database) are better isolation.
-3. The tables are created by Hibernate on first start (`ddl-auto=update`, see [risks](#known-risks-and-open-items)).
-
-**Direct vs pooled:** use the **direct** host (no `-pooler` in the hostname) for the services. `ddl-auto=update` runs
-DDL on every start, and DDL / session state is what transaction-mode PgBouncer handles worst. The pools are small
-(`maximum-pool-size=5`), so the direct connection limit is fine: worst case is (max instances of all services) x 5,
-e.g. (3 + 5 + 1) x 5 = 45. Check that against your compute size's `max_connections` in Neon's docs. Switch to the
-pooled host only if you scale out a lot, and then move schema changes to a migration step on the direct host.
-
-JDBC form: `jdbc:postgresql://<endpoint>.<region>.aws.neon.tech/<db>?sslmode=require` with `DB_USERNAME` /
-`DB_PASSWORD` set separately (do not embed credentials in `DB_URL`).
-
-Neon's free tier suspends an idle compute after a few minutes; the first query afterwards waits for it to wake (and
-Hikari replaces the dropped connections). The Cloud Run probes below only hit liveness/readiness, which do not touch
-the database, so they do not keep Neon awake. The analytics sponge only touches Postgres when there are events.
-
-## Redis options
-
-What the app needs from Redis, whichever provider:
-
-- **Streams with consumer groups**: `XADD` (with `MAXLEN ~`), `XGROUP CREATE ... MKSTREAM`, `XREADGROUP`, `XACK`, `XDEL`.
-- **Persistence** (AOF or RDB): un-sponged click events and login sessions live only in Redis.
-- **No eviction of keys without TTL**: `noeviction` or a `volatile-*` policy. Under `allkeys-*` Redis may evict the
-  stream or consumer group, i.e. lose clicks.
-- **AUTH + TLS** when reached over the internet. No `CONFIG` command is needed: Spring Session uses the non-indexed
-  repository (`spring.session.data.redis.repository-type=default`), which never runs `CONFIG SET notify-keyspace-events`.
-
-**Command volume:** the analytics sponge polls every 500 ms with two `XREADGROUP`s, about **4 commands/s, ~10.4
-million/month with zero traffic**. On top: about 4 commands per click (cache read, `INCR`, `XADD`, and the sponge's
-`XACK`/`XDEL` per batch), plus session reads/writes on every user-service request.
-
-| Option | Cost (check current pricing) | Notes |
-|--------|------------------------------|-------|
-| **Upstash** free | $0 | 500K commands/month: the idle sponge alone burns it in about **1.5 days**. Not viable |
-| **Upstash** pay-as-you-go | ~$0.20 / 100K commands -> **~$21/month idle** | Grows with traffic |
-| **Upstash** fixed plan | **~$10/month** (smallest) | No per-command billing; the realistic Upstash choice. TLS required (`REDIS_SSL=true`); Streams + consumer groups supported; data persisted. Leave eviction off |
-| **Memorystore for Redis** (Basic, 1 GB) | **~$36/month** minimum | Private IP only: Cloud Run needs Direct VPC egress (no extra cost) or a Serverless VPC Access connector (extra). Enable AUTH; in-transit TLS uses a Google-managed CA you'd have to add to the JVM truststore (`spring.data.redis.ssl.bundle`), so AUTH without TLS inside the VPC is the simpler start. Enable RDB persistence. Default `volatile-lru` is OK |
-| **Small VM** (e.g. `e2-micro`, Redis 7) | ~$0 (one free-tier e2-micro in some US regions) to a few $/month | You own patching, backups, monitoring. Use `appendonly yes`, `requirepass`, `maxmemory-policy noeviction`, reach it over the VPC (Direct VPC egress), never expose it publicly |
-
-Suggestion for a portfolio MVP: Upstash fixed plan (least ops) or the VM (cheapest). Memorystore when it needs to be
-production-grade. All three work with the same env vars.
-
-Security note: Spring Session stores Java-serialized objects in Redis, so anyone who can write to that Redis can
-attack the user service. Keep it private and authenticated.
-
-## OAuth (Google, GitHub)
-
-The OAuth redirect URI is on the **Vercel origin**, not on the user service's Cloud Run URL:
-
-```
-https://<project>.vercel.app/login/oauth2/code/google
-https://<project>.vercel.app/login/oauth2/code/github
-```
-
-Why: the browser must come back to the origin that holds the `SESSION` cookie set when login started (the cookie
-carries the OAuth `state`). Login starts on the Vercel origin (`NEXT_PUBLIC_API_BASE_URL`), so it must return there;
-Vercel then proxies `/login/oauth2/*` to the user service. The prod profile pins this URI
-(`OAUTH2_REDIRECT_BASE_URL`, default `FRONTEND_URL`) instead of deriving `{baseUrl}` from forwarded headers, so it does
-not depend on which Host/X-Forwarded-Host headers survive Vercel -> Cloud Run. (Spring Security 7.1 only checks
-`state` on the callback and reuses the stored redirect URI for the token exchange, so the pinned value is all that
-matters.)
-
-**Google** (console.cloud.google.com -> APIs & Services):
-
-1. OAuth consent screen: app name, support email; scopes `openid`, `email`, `profile` (no verification needed for
-   these). While the app is in "Testing", only listed test users can sign in; publish it for public sign-in.
-2. Credentials -> Create credentials -> OAuth client ID -> Web application. Authorized redirect URI:
-   `https://<project>.vercel.app/login/oauth2/code/google`. A separate prod client is cleaner than adding the URI to
-   the dev client (whose URI is `http://localhost:8080/login/oauth2/code/google`).
-3. `GOOGLE_CLIENT_ID` (env) and `GOOGLE_CLIENT_SECRET` (Secret Manager) on the user service.
-
-**GitHub:** an OAuth App has exactly **one** callback URL (redirect URIs must be on its host), so create a **second
-OAuth App for production** (github.com/settings/developers -> New OAuth App):
-
-- Homepage URL: `https://<project>.vercel.app`
-- Authorization callback URL: `https://<project>.vercel.app/login/oauth2/code/github`
-- `GITHUB_CLIENT_ID` / `GITHUB_CLIENT_SECRET` from that app.
-
-Vercel **preview deployments** cannot log in: their URLs are not registered redirect URIs and `FRONTEND_URL` points
-at production.
-
-## Cloud Run
-
-### One-time GCP setup
+The free `e2-micro` exists only in `us-west1`, `us-central1` and `us-east1`, with a standard disk up to 30 GB.
 
 ```bash
-PROJECT=<project-id>; REGION=europe-west1; REPO=virallink
-gcloud config set project $PROJECT
-gcloud services enable run.googleapis.com artifactregistry.googleapis.com secretmanager.googleapis.com \
-  iam.googleapis.com iamcredentials.googleapis.com sts.googleapis.com
+gcloud compute instances create virallink-redis \
+  --zone=us-west1-b --machine-type=e2-micro \
+  --image-family=debian-12 --image-project=debian-cloud \
+  --boot-disk-size=30GB --boot-disk-type=pd-standard
+```
 
-gcloud artifacts repositories create $REPO --repository-format=docker --location=$REGION
+On the VM (`gcloud compute ssh virallink-redis --zone=us-west1-b`):
 
-# Runtime identity for the three services (reads secrets, nothing else)
+```bash
+sudo apt-get update && sudo apt-get install -y redis-server
+REDIS_PW=$(openssl rand -hex 24); echo "SAVE THIS: $REDIS_PW"
+sudo tee -a /etc/redis/redis.conf <<EOF
+bind 0.0.0.0
+requirepass $REDIS_PW
+appendonly yes
+maxmemory 256mb
+maxmemory-policy noeviction
+EOF
+sudo systemctl restart redis-server
+redis-cli -a "$REDIS_PW" --no-auth-warning ping      # PONG
+exit
+```
+
+- `appendonly yes` keeps queued clicks and login sessions across restarts; `noeviction` stops Redis from dropping
+  the click stream when memory is tight.
+- Lost the password? `sudo grep '^requirepass' /etc/redis/redis.conf` on the VM (last line wins).
+
+Back in Cloud Shell, remove the public IP (only needed for `apt-get`; it also costs money) and note the private IP:
+
+```bash
+ZONE=us-west1-b
+gcloud compute instances delete-access-config virallink-redis --zone=$ZONE --access-config-name="external-nat"
+gcloud compute instances describe virallink-redis --zone=$ZONE --format='value(networkInterfaces[0].networkIP)'
+```
+
+Without a public IP, SSH goes through Google's tunnel: `gcloud compute ssh virallink-redis --zone=$ZONE --tunnel-through-iap`.
+For OS updates, temporarily re-add a public IP with `gcloud compute instances add-access-config`.
+
+Cloud Run reaches the VM with `--network=default --subnet=default --vpc-egress=private-ranges-only` (step 5); the
+default network's firewall already allows internal traffic. No TLS needed: traffic stays on the private network.
+
+Other Redis options, if the VM becomes a chore: Upstash fixed plan (~$10/month; the free 500K commands/month are not
+enough while analytics polls), Memorystore (~$36/month minimum). Any Redis works if it supports Streams with consumer
+groups, has persistence on and does not evict keys without a TTL.
+
+## 3. OAuth apps
+
+The callback addresses are on the **Vercel site**, not on Cloud Run (the login cookie lives there):
+
+- Google: `https://vilnk.vercel.app/login/oauth2/code/google`
+- GitHub: `https://vilnk.vercel.app/login/oauth2/code/github`
+
+**Google** (console.cloud.google.com → APIs & Services): set up the OAuth consent screen (External; scopes
+`openid`, `email`, `profile`), then Credentials → Create credentials → OAuth client ID → Web application, with the
+redirect URI above. Copy the client ID and secret right away.
+While the app is in **Testing**, only listed test users can sign in. To open it to everyone: Google Auth Platform
+(OAuth consent screen) → **Audience** → **Publish app**. With only these basic scopes no Google review is needed.
+
+**GitHub** (Settings → Developer settings → OAuth Apps → New OAuth App): a separate app for production (one
+callback URL per app). Homepage `https://vilnk.vercel.app`, callback as above; **Generate a new client secret** and
+copy it (shown once).
+
+## 4. GCP setup and secrets
+
+In Cloud Shell (project `virallink-487806`):
+
+```bash
+gcloud services enable run.googleapis.com artifactregistry.googleapis.com cloudbuild.googleapis.com \
+  secretmanager.googleapis.com compute.googleapis.com
+gcloud artifacts repositories create virallink --repository-format=docker --location=us-west1
+
+# Runtime identity of the services: reads secrets, nothing else
 gcloud iam service-accounts create virallink-run --display-name="Virallink Cloud Run runtime"
-RUN_SA=virallink-run@$PROJECT.iam.gserviceaccount.com
+RUN_SA=virallink-run@virallink-487806.iam.gserviceaccount.com
+```
 
-# Secrets (repeat for each; printf avoids a trailing newline)
+### Secrets
+
+Paste values with `read -rs` (hidden, not saved in shell history). After each `read` line, paste and press Enter.
+**Paste the real value, never the `<...>` placeholder text**: that happened once and broke Redis auth.
+
+```bash
+read -rs V && printf '%s' "$V" | gcloud secrets create DB_PASSWORD --data-file=-            # Neon password
+read -rs V && printf '%s' "$V" | gcloud secrets create redis-password --data-file=-         # from redis.conf
+read -rs V && printf '%s' "$V" | gcloud secrets create google-client-secret --data-file=-
+read -rs V && printf '%s' "$V" | gcloud secrets create github-client-secret --data-file=-
+unset V
 printf '%s' "$(openssl rand -base64 32)" | gcloud secrets create jwt-secret --data-file=-
 printf '%s' "$(openssl rand -base64 32)" | gcloud secrets create api-key-signing-secret --data-file=-
 printf '%s' "$(openssl rand -hex 16)"    | gcloud secrets create hashids-salt --data-file=-
-printf '%s' '<neon password>'            | gcloud secrets create db-password --data-file=-
-printf '%s' '<redis password>'           | gcloud secrets create redis-password --data-file=-
-printf '%s' '<google secret>'            | gcloud secrets create google-client-secret --data-file=-
-printf '%s' '<github secret>'            | gcloud secrets create github-client-secret --data-file=-
-for s in jwt-secret api-key-signing-secret hashids-salt db-password redis-password google-client-secret github-client-secret; do
+
+for s in DB_PASSWORD redis-password google-client-secret github-client-secret jwt-secret api-key-signing-secret hashids-salt; do
   gcloud secrets add-iam-policy-binding $s --member=serviceAccount:$RUN_SA --role=roles/secretmanager.secretAccessor
 done
 ```
 
-### Build and push (first time, from a machine with Docker; later via the workflow)
+- `gcloud secrets list` shows names only. To check a value: `gcloud secrets versions access latest --secret=<name>`.
+- To change one: `read -rs V && printf '%s' "$V" | gcloud secrets versions add <name> --data-file=-` (`:latest`
+  picks it up at the next deploy/restart), then optionally `gcloud secrets versions disable 1 --secret=<name>`.
+
+## 5. Build and deploy the services
+
+Get the code into Cloud Shell and build with Cloud Build. `gcloud builds submit` uploads one service folder, runs its
+Dockerfile on Google's machines and stores the image in Artifact Registry:
 
 ```bash
-gcloud auth configure-docker $REGION-docker.pkg.dev
-TAG=$(git rev-parse --short HEAD)
-for s in user redirect analytics; do
-  docker build -t $REGION-docker.pkg.dev/$PROJECT/$REPO/$s:$TAG ./$s
-  docker push $REGION-docker.pkg.dev/$PROJECT/$REPO/$s:$TAG
-done
+cd ~ && git clone https://github.com/ehdro06/viral-analytics-hub.git && cd viral-analytics-hub
+git checkout main && git pull
+gcloud builds submit ./user     --tag us-west1-docker.pkg.dev/virallink-487806/virallink/user:v1
+gcloud builds submit ./redirect --tag us-west1-docker.pkg.dev/virallink-487806/virallink/redirect:v1
 ```
 
-(On Apple Silicon add `--platform linux/amd64`. Or build in GCP: `gcloud builds submit ./user --tag ...`.)
-
-### First deploy (sets env vars + secrets; later deploys keep them)
+First deploy (this sets everything; later deploys only change the image). `gcloud run deploy` is the command-line
+version of the console's "Create service" form:
 
 ```bash
-IMG=$REGION-docker.pkg.dev/$PROJECT/$REPO
-NEON_HOST=<endpoint>.<region>.aws.neon.tech
-COMMON_ENV="SPRING_PROFILES_ACTIVE=prod,DB_USERNAME=<neon role>,REDIS_HOST=<redis host>,REDIS_PORT=6379,REDIS_SSL=true"
-COMMON_SECRETS="DB_PASSWORD=db-password:latest,REDIS_PASSWORD=redis-password:latest,JWT_SECRET=jwt-secret:latest"
+RUN_SA=virallink-run@virallink-487806.iam.gserviceaccount.com
+NEON=ep-misty-forest-arzle9a2.c-4.us-west-2.aws.neon.tech
+COMMON="--region=us-west1 --service-account=$RUN_SA --allow-unauthenticated --memory=1Gi --cpu=1 --cpu-boost \
+  --network=default --subnet=default --vpc-egress=private-ranges-only"
 
-gcloud run deploy user --image=$IMG/user:$TAG --region=$REGION --service-account=$RUN_SA \
-  --allow-unauthenticated --memory=1Gi --cpu=1 --cpu-boost --cpu-throttling --min-instances=0 --max-instances=3 \
-  --set-env-vars="$COMMON_ENV,DB_URL=jdbc:postgresql://$NEON_HOST/virallink_user?sslmode=require,FRONTEND_URL=https://<project>.vercel.app,GOOGLE_CLIENT_ID=<id>,GITHUB_CLIENT_ID=<id>" \
-  --set-secrets="$COMMON_SECRETS,API_KEY_SIGNING_SECRET=api-key-signing-secret:latest,GOOGLE_CLIENT_SECRET=google-client-secret:latest,GITHUB_CLIENT_SECRET=github-client-secret:latest"
+gcloud run deploy user --image=us-west1-docker.pkg.dev/virallink-487806/virallink/user:v1 $COMMON \
+  --min-instances=0 --max-instances=3 \
+  --set-env-vars="SPRING_PROFILES_ACTIVE=prod,DB_URL=jdbc:postgresql://$NEON/virallink_user?sslmode=require,DB_USERNAME=neondb_owner,REDIS_HOST=10.138.0.2,REDIS_PORT=6379,REDIS_SSL=false,FRONTEND_URL=https://vilnk.vercel.app,GOOGLE_CLIENT_ID=<google client id>,GITHUB_CLIENT_ID=<github client id>" \
+  --set-secrets="DB_PASSWORD=DB_PASSWORD:latest,REDIS_PASSWORD=redis-password:latest,JWT_SECRET=jwt-secret:latest,API_KEY_SIGNING_SECRET=api-key-signing-secret:latest,GOOGLE_CLIENT_SECRET=google-client-secret:latest,GITHUB_CLIENT_SECRET=github-client-secret:latest"
 
-gcloud run deploy redirect --image=$IMG/redirect:$TAG --region=$REGION --service-account=$RUN_SA \
-  --allow-unauthenticated --memory=1Gi --cpu=1 --cpu-boost --cpu-throttling --min-instances=1 --max-instances=5 \
-  --set-env-vars="$COMMON_ENV,DB_URL=jdbc:postgresql://$NEON_HOST/virallink_redirect?sslmode=require" \
-  --set-secrets="$COMMON_SECRETS,API_KEY_SIGNING_SECRET=api-key-signing-secret:latest,HASHIDS_SALT=hashids-salt:latest"
-
-gcloud run deploy analytics --image=$IMG/analytics:$TAG --region=$REGION --service-account=$RUN_SA \
-  --allow-unauthenticated --memory=1Gi --cpu=1 --cpu-boost --no-cpu-throttling --min-instances=1 --max-instances=1 \
-  --set-env-vars="$COMMON_ENV,DB_URL=jdbc:postgresql://$NEON_HOST/virallink_analytics?sslmode=require&reWriteBatchedInserts=true" \
-  --set-secrets="$COMMON_SECRETS"
+gcloud run deploy redirect --image=us-west1-docker.pkg.dev/virallink-487806/virallink/redirect:v1 $COMMON \
+  --min-instances=0 --max-instances=3 \
+  --set-env-vars="SPRING_PROFILES_ACTIVE=prod,DB_URL=jdbc:postgresql://$NEON/virallink_redirect?sslmode=require,DB_USERNAME=neondb_owner,REDIS_HOST=10.138.0.2,REDIS_PORT=6379,REDIS_SSL=false" \
+  --set-secrets="DB_PASSWORD=DB_PASSWORD:latest,REDIS_PASSWORD=redis-password:latest,JWT_SECRET=jwt-secret:latest,API_KEY_SIGNING_SECRET=api-key-signing-secret:latest,HASHIDS_SALT=hashids-salt:latest"
 ```
 
-`--allow-unauthenticated` is required: Vercel's rewrites and short-link clicks are anonymous HTTP calls, and the apps
-enforce auth themselves (JWT / session). If an org policy blocks `allUsers`, ask for an exception for these services.
+Replace both `<...>` client IDs with the real values (no angle brackets: a leftover placeholder in `FRONTEND_URL`
+made every user-service request fail with "Bad authority").
 
-### Settings per service
+- `--allow-unauthenticated`: Vercel's forwarding and short-link visitors are anonymous; the apps check logins themselves.
+- `--min-instances=0` keeps it free; the first request after idle waits ~15-30 s for Java to start. Set redirect to
+  `1` once real people click links.
+- Change a single setting later without rebuilding: `gcloud run services update <service> --region=us-west1 --update-env-vars="KEY=value"`.
+- The same settings are editable in the console: Cloud Run → service → **Edit & deploy new revision**.
 
-| | user | redirect | analytics |
-|---|---|---|---|
-| Billing | request-based (`--cpu-throttling`) | request-based (see note) | **instance-based (`--no-cpu-throttling`)** |
-| min instances | 0 (scale to zero) | **1** (no JVM cold start on the hot path) | **1** |
-| max instances | e.g. 3 | e.g. 5 | **1** |
-| memory / CPU | 1 GiB / 1 | 1 GiB / 1 | 1 GiB / 1 |
-| Startup CPU boost | on | on | on |
+## 6. Vercel
 
-- **analytics** is a Redis Streams consumer driven by `@Scheduled`, not by requests. With request-based billing its
-  CPU is throttled between requests and the sponge stalls, so it needs instance-based billing and at least one
-  instance. **Exactly one**: the consumer name is a constant (`analytics-sponge-1`), and two instances with the same
-  name would re-read each other's pending entries and double-count clicks. Scaling out needs a per-instance consumer
-  name plus `XAUTOCLAIM` for dead consumers. This always-on instance is the main fixed cost (roughly $40-50/month for
-  1 vCPU + 1 GiB on instance-based pricing; check the Cloud Run pricing page and its free tier).
-- **redirect:** min-instances=1 avoids the 15-30 s JVM cold start on short links (measured: ~17 s to start with
-  1 vCPU / 512 MiB locally; CPU boost helps). Note: the click event is published `@Async` **after** the 302 is sent.
-  Under request-based billing Cloud Run does not guarantee CPU after the response; the publish takes milliseconds and
-  normally completes, but if clicks go missing, switch redirect to `--no-cpu-throttling` (higher cost).
-- **user** can scale to zero: sessions are in Redis, so no state is lost; the first login after idle waits for a cold start.
-- **Memory:** idle RSS measured locally is ~260 MiB under a 512 MiB limit and ~360-400 MiB unconstrained. 512 MiB
-  works; 1 GiB leaves headroom. The images set `-XX:MaxRAMPercentage=75`, so the heap follows the limit. Extra JVM
-  flags: `JDK_JAVA_OPTIONS`.
-- **Probes:** Cloud Run's default TCP startup probe works (Tomcat opens the port when the context is ready). To use
-  HTTP: startup `/actuator/health/readiness`, liveness `/actuator/health/liveness` (both public, both skip DB/Redis).
-- **Shutdown:** the prod profile caps graceful shutdown at 8 s (Cloud Run kills 10 s after SIGTERM).
+1. **Add New → Project**, import the repo. **Root Directory** `viral-analytics-hub`, framework Next.js, Node.js 22.x.
+2. Add the environment variables from [the table above](#environment-variables) (environment **Production**).
+3. **Domains:** add `vilnk.vercel.app` and make sure it is attached to **Production**, not to a git branch. (Ours was
+   attached to the deploy branch: it then served preview builds, which get no Production variables, so the login
+   button pointed at `localhost:8080`, and previews are protected, so visitors saw a Vercel login wall.)
+4. **Settings → Environments → Production → Branch Tracking:** `main`.
+5. **Deployment Protection:** standard protection (previews protected, production public).
+6. Deploy. After changing any variable: Deployments → latest Production → ⋯ → **Redeploy** with **"Use existing
+   Build Cache" unticked** (`NEXT_PUBLIC_*` values are baked into the build).
 
-### Behind Cloud Run's proxy (HTTPS, X-Forwarded-*)
+Vercel deploys `main` automatically on every merge.
 
-Cloud Run terminates TLS and forwards plain HTTP with `X-Forwarded-Proto: https` / `X-Forwarded-For`. Its front end
-connects from `169.254.0.0/16`, which is in Tomcat's default trusted internal-proxy list, so with
-`server.forward-headers-strategy=native` (redirect, and now user) `request.isSecure()` is true and `getRemoteAddr()`
-is the client IP.
-
-- **user:** `forward-headers-strategy=native` added. The OAuth redirect URI is pinned anyway (above). The prod profile
-  also forces `server.servlet.session.cookie.secure=true`, so the `SESSION` cookie is
-  `Secure; HttpOnly; SameSite=Lax` even if a hop drops `X-Forwarded-Proto` (`Lax` is right: everything is same-origin
-  on Vercel and the OAuth return is a top-level GET). Success, failure and logout redirects are absolute
-  `FRONTEND_URL` URLs. CORS allows exactly `FRONTEND_URL`, but browsers never call the service cross-origin (it is all
-  same-origin through Vercel), so CORS is not on the critical path.
-- **redirect:** already had `native`; the click IP comes from `X-Forwarded-For`. **Verify after the first deploy**
-  that stored IPs (anonymized `a.b.c.0`) are client IPs and not Google front-end addresses; if not, set
-  `server.tomcat.remoteip.trusted-proxies` for the extra hop.
-- **analytics:** not needed. It builds no redirect URLs and gets client IPs from the stream, not the request.
-
-Verified locally (prod profile, password-protected Redis, Host header set to a Cloud Run URL, `X-Forwarded-Proto: https`):
-OAuth start returns `redirect_uri=https://<vercel>/login/oauth2/code/google` and a Secure `SESSION` cookie stored in
-Redis; the callback still finds the OAuth state after the container is restarted; a failed login and logout
-redirect to the Vercel `/login`; `X-Forwarded-For: 203.0.113.77` is stored as `203.0.113.0`.
-
-## Vercel
-
-1. Import the GitHub repo. **Root Directory:** `viral-analytics-hub`. Framework preset: Next.js. pnpm is detected
-   from `pnpm-lock.yaml`. Set Node.js to **22.x** (what CI uses).
-2. Environment variables (Production): see [the table above](#vercel-frontend) and `viral-analytics-hub/.env.example`.
-3. Deploy. Any change to those variables needs a **redeploy**: `NEXT_PUBLIC_*` are inlined into the bundle and the
-   `*_SERVICE_URL` rewrites are written into the routes manifest at build time.
-
-`next.config.ts` has **no `output: "standalone"`** (HANDOVER said it did; that setting was lost in an earlier merge).
-Vercel does not need it, so it was deliberately not re-added.
-
-**Rewrites with https Cloud Run URLs** work as-is: verified with `pnpm build` using `https://...a.run.app` values
-(trailing slashes are now stripped). Vercel proxies external rewrites server-side, forwarding `Cookie` and returning
-`Set-Cookie` and `Location` unchanged, which is what the login flow needs:
-
-1. Browser -> `https://<vercel>/oauth2/authorization/google` (`NEXT_PUBLIC_API_BASE_URL` = Vercel origin) -> rewrite
-   -> user service: stores the OAuth state in the Redis session, answers `302` to Google + `Set-Cookie: SESSION`
-   (first-party, on the Vercel domain).
-2. Google -> `https://<vercel>/login/oauth2/code/google` -> rewrite -> user service (cookie included): token
-   exchange, `302` to `FRONTEND_URL`.
-3. App -> `GET /api/v1/users/me` (cookie) -> rewrite -> JWT in the response, kept in memory, sent as Bearer to
-   `/api/v1/links/*` and `/api/v1/analytics/*` (rewrites to redirect / analytics).
-4. Logout: `POST /logout` -> rewrite -> session invalidated, `302` to `FRONTEND_URL/login`.
-
-Why `NEXT_PUBLIC_API_BASE_URL` must be the Vercel origin: the login page links to
-`${NEXT_PUBLIC_API_BASE_URL}/oauth2/authorization/...`. Pointed at the user service's Cloud Run URL, the `SESSION`
-cookie would land on `*.run.app`, and `/api/v1/users/me` on the Vercel domain would never see it: every login would
-"succeed" and then 401. (Locally `http://localhost:8080` works only because cookies ignore ports.)
-
-The first request after the user service scaled to zero waits for a JVM start (15-30 s) through the rewrite; set
-`--min-instances=1` on user if that is too slow for you.
-
-## GeoLite2 (analytics)
-
-The `.mmdb` is git-ignored and must not be committed (MaxMind license). Current behavior was checked and verified:
-if the file is missing, analytics starts normally, logs
-`GeoLite database not found at /app/geoip/GeoLite2-City.mmdb. Geo enrichment disabled.`, and records country/city
-as `Unknown` (verified by running the image without the file).
-
-Two ways to supply it:
-
-- **Bake it in CI (implemented, optional):** add the repository variable `MAXMIND_ACCOUNT_ID` and secret
-  `MAXMIND_LICENSE_KEY`. The deploy workflow downloads GeoLite2-City into `analytics/geoip/` before `docker build`,
-  and the Dockerfile copies `geoip/` into the image. Without the key it builds without the database. Locally: drop
-  `GeoLite2-City.mmdb` into `analytics/geoip/` before `docker build`. The image then contains the database, so keep
-  the registry private.
-- **Mount at run time:** upload the file to a private Cloud Storage bucket and mount it:
-
-  ```bash
-  gcloud run services update analytics --region=$REGION --execution-environment=gen2 \
-    --add-volume=name=geoip,type=cloud-storage,bucket=<bucket>,readonly=true \
-    --add-volume-mount=volume=geoip,mount-path=/geoip \
-    --update-env-vars=GEOLITE_PATH=/geoip/GeoLite2-City.mmdb
-  ```
-
-  The runtime service account needs `roles/storage.objectViewer` on the bucket. Updating the database = upload a new
-  file + restart (new revision), no image rebuild. The file is read once at startup.
-
-**License (MaxMind GeoLite2 EULA, check the current text):** a free account and license key are required to
-download; attribution to MaxMind is required wherever the data is shown; no public redistribution of the database;
-keep it up to date (MaxMind publishes updates twice a week and expects outdated copies to be replaced).
-
-## CI/CD (GitHub Actions + Workload Identity Federation)
-
-`.github/workflows/deploy-cloud-run.yml` is **manual only** (`workflow_dispatch`, choose `all` / one service). It
-builds the image with the service's Dockerfile, pushes `<region>-docker.pkg.dev/<project>/<repo>/<service>:<sha>`,
-and runs `gcloud run deploy` with the image plus the scaling flags from the table above. Env vars and secrets from the
-first deploy are kept. `ci.yml` is unchanged.
-
-Authentication is GitHub OIDC -> Workload Identity Federation: no service-account JSON keys.
+## 7. Check it works
 
 ```bash
-PROJECT_NUMBER=$(gcloud projects describe $PROJECT --format='value(projectNumber)')
-GH_REPO=ehdro06/viral-analytics-hub
-
-gcloud iam workload-identity-pools create github --location=global --display-name="GitHub Actions"
-gcloud iam workload-identity-pools providers create-oidc viral-analytics-hub \
-  --location=global --workload-identity-pool=github \
-  --issuer-uri="https://token.actions.githubusercontent.com" \
-  --attribute-mapping="google.subject=assertion.sub,attribute.repository=assertion.repository,attribute.ref=assertion.ref" \
-  --attribute-condition="assertion.repository=='$GH_REPO' && assertion.ref=='refs/heads/main'"
-
-gcloud iam service-accounts create github-deployer --display-name="GitHub Actions deployer"
-DEPLOY_SA=github-deployer@$PROJECT.iam.gserviceaccount.com
-gcloud projects add-iam-policy-binding $PROJECT --member=serviceAccount:$DEPLOY_SA --role=roles/run.developer
-gcloud artifacts repositories add-iam-policy-binding $REPO --location=$REGION \
-  --member=serviceAccount:$DEPLOY_SA --role=roles/artifactregistry.writer
-gcloud iam service-accounts add-iam-policy-binding $RUN_SA \
-  --member=serviceAccount:$DEPLOY_SA --role=roles/iam.serviceAccountUser
-gcloud iam service-accounts add-iam-policy-binding $DEPLOY_SA --role=roles/iam.workloadIdentityUser \
-  --member="principalSet://iam.googleapis.com/projects/$PROJECT_NUMBER/locations/global/workloadIdentityPools/github/attribute.repository/$GH_REPO"
+curl -s https://user-85302724166.us-west1.run.app/actuator/health; echo       # {"groups":[...],"status":"UP"}
+curl -s https://redirect-85302724166.us-west1.run.app/actuator/health; echo
+curl -sI https://vilnk.vercel.app/oauth2/authorization/google | grep -iE "^location|^set-cookie"
 ```
 
-The attribute condition only lets runs from `main` of this repo authenticate (runs dispatched on other branches fail
-at the auth step), so remove the `ref` part if you want to deploy branches.
+- Always include `https://` (plain `http://` returns an empty redirect) and check the region spelling (`us-west1`).
+- The Location header must contain `redirect_uri=https://vilnk.vercel.app/login/oauth2/code/google`; the cookie
+  must be `SESSION=…; Secure; HttpOnly`.
 
-Then set repository **variables**: `GCP_PROJECT_ID`, `GCP_REGION`, `GCP_ARTIFACT_REPO`,
-`GCP_WORKLOAD_IDENTITY_PROVIDER` (`projects/<number>/locations/global/workloadIdentityPools/github/providers/viral-analytics-hub`),
-`GCP_DEPLOY_SERVICE_ACCOUNT`, and optionally `MAXMIND_ACCOUNT_ID` + secret `MAXMIND_LICENSE_KEY`.
+Then in an incognito window: log in with Google and GitHub (you land on `/dashboard`), create a link, open it, open
+Settings, log out. Dashboard charts show errors until analytics is deployed (clicks wait in Redis meanwhile).
 
-The frontend needs no workflow: Vercel's Git integration deploys on push to `main` (and builds previews for PRs).
+When something fails, the cause is in the logs: `gcloud run services logs read <service> --region=us-west1 --limit=60`
+(look for `ERROR`, `Exception`, `Caused by`).
 
-## Smoke test after deploy
+## Updating a service
 
-1. `curl https://<user-url>/actuator/health` (and redirect, analytics): `{"status":"UP"}`.
-2. Open `https://<vercel>/login`, sign in with Google and with GitHub; you land on `/dashboard`.
-   DevTools -> Application -> Cookies: `SESSION` on the **Vercel** domain, `Secure`, `HttpOnly`.
-3. Create a link, open the short URL in a private window: 302 to the target.
-4. Within a few seconds the dashboard counts it. In the analytics logs: `Sponged 1 events`.
-5. Check the stored IP is yours (anonymized), not a Google address (`select ip_address from link_analytics order by id desc limit 1;`).
-6. Settings -> create an API key -> `curl -H "X-API-Key: <key>" https://<redirect-url>/api/v1/links` works.
-7. Log out: back on `/login`, and `/api/v1/users/me` returns 401.
+```bash
+cd ~/viral-analytics-hub && git checkout main && git pull
+gcloud builds submit ./redirect --tag us-west1-docker.pkg.dev/virallink-487806/virallink/redirect:<tag>
+gcloud run deploy redirect --region=us-west1 --image=us-west1-docker.pkg.dev/virallink-487806/virallink/redirect:<tag>
+```
 
-## Known risks and open items
+Deploying with only `--image` keeps every other setting. Use any unique tag; the commit hash
+(`$(git rev-parse --short HEAD)`) is the usual choice, since it says exactly which code is running. Every deploy
+also gets a numbered Cloud Run revision (`redirect-00003-abc`), and you can roll back to an earlier revision in the
+console (service → Revisions → Manage traffic).
 
-- **`spring.jpa.hibernate.ddl-auto=update` in production** (all three services; deliberately **not changed**):
-  every instance start may `ALTER` the live schema, concurrently if several instances start at once. It never drops
-  or renames columns, and a bad entity change cannot be rolled back. Once the schema is stable set
-  `SPRING_JPA_HIBERNATE_DDL_AUTO=validate` per service and introduce Flyway/Liquibase migrations.
-- **analytics cannot scale out** (fixed consumer name, see above). Keep `--max-instances=1`.
-- **Spring Session was not active before this change.** `user/build.gradle` depended on bare
-  `spring-session-data-redis`; in Boot 4 the auto-configuration lives in separate modules, so sessions silently stayed
-  in Tomcat memory (`JSESSIONID`) and `spring.session.*` was ignored. On Cloud Run that would break logins whenever
-  the OAuth callback hit another instance and log everyone out on scale-to-zero. Now `spring-boot-starter-session-data-redis`.
-  Existing local sessions are not migrated (everyone logs in once more).
-- **JWT lifetime** is 24 h with no revocation; logout only kills the session.
-- **Dead code** from an earlier auth design: `OAuth2LoginSuccessHandler` (not wired into `SecurityConfig`) and the
-  `/auth/callback` page. The live flow is session cookie -> `/api/v1/users/me` -> JWT.
-- Docker Hub rate limits: Cloud Build and GitHub runners usually pull fine; if not, the same images are on
-  `mirror.gcr.io/library/eclipse-temurin:25-{jdk,jre}-noble`.
+## Automatic deploys (Cloud Build triggers)
+
+`cloudbuild.yaml` (repo root) builds one service, tags the image with the commit hash and deploys it, keeping all
+settings. One trigger per service makes merging into `main` redeploy whatever changed, like Vercel does for the frontend.
+
+**Once: allow Cloud Build to deploy.** Builds run as the Compute Engine default service account:
+
+```bash
+BUILD_SA=85302724166-compute@developer.gserviceaccount.com
+gcloud projects add-iam-policy-binding virallink-487806 --member=serviceAccount:$BUILD_SA --role=roles/run.developer
+gcloud projects add-iam-policy-binding virallink-487806 --member=serviceAccount:$BUILD_SA --role=roles/artifactregistry.writer
+gcloud projects add-iam-policy-binding virallink-487806 --member=serviceAccount:$BUILD_SA --role=roles/logging.logWriter
+gcloud iam service-accounts add-iam-policy-binding virallink-run@virallink-487806.iam.gserviceaccount.com \
+  --member=serviceAccount:$BUILD_SA --role=roles/iam.serviceAccountUser
+```
+
+**Per service: create a trigger** (console → Cloud Build → Triggers → **Create trigger**):
+
+| Field | Value |
+|---|---|
+| Name | `deploy-user` (or `deploy-redirect`) |
+| Region | `us-west1` |
+| Event | Push to a branch |
+| Source | connect GitHub (Cloud Build GitHub app) → `ehdro06/viral-analytics-hub`, branch `^main$` |
+| Included files filter | `user/**` (or `redirect/**`) |
+| Configuration | Cloud Build configuration file, location `cloudbuild.yaml` |
+| Substitution variable | `_SERVICE` = `user` (or `redirect`) |
+| Service account | `85302724166-compute@developer.gserviceaccount.com` |
+
+Test it with **Run** on the trigger, then watch Cloud Build → History. After that, no manual build or deploy is
+needed. Add `deploy-analytics` the same way once analytics is deployed.
+
+The GitHub Actions workflow `.github/workflows/deploy-cloud-run.yml` is a manual alternative (needs Workload Identity
+Federation); with triggers in place it is not needed.
+
+## Analytics (not deployed yet)
+
+Today analytics polls Redis every 500 ms, so on Cloud Run it would need an always-on instance with CPU always
+allocated (roughly $40-50/month). Planned change before deploying it: drain the click queue on demand (Cloud
+Scheduler once a minute, or a wake-up triggered by the first click), so it can scale to zero on request-based
+billing. Clicks queue safely in Redis until then (capped at 500,000).
+
+GeoLite2 (country/city): the `.mmdb` file must not go into git (MaxMind license). Plan: private bucket
+`gs://virallink-487806-geoip` in `us-west1`, mounted into analytics:
+
+```bash
+gcloud run services update analytics --region=us-west1 \
+  --add-volume=name=geoip,type=cloud-storage,bucket=virallink-487806-geoip,readonly=true \
+  --add-volume-mount=volume=geoip,mount-path=/geoip \
+  --update-env-vars=GEOLITE_PATH=/geoip/GeoLite2-City.mmdb
+```
+
+(plus `roles/storage.objectViewer` on the bucket for `virallink-run`). Without the file analytics still runs and
+records geography as "Unknown". MaxMind's license requires attribution and keeping the file reasonably current.
+
+## Pitfalls we hit
+
+| Symptom | Cause | Fix |
+|---|---|---|
+| `gcloud compute instances create` "Retry" error | Compute API enabled seconds earlier | wait a minute, rerun |
+| `… was not found` for the VM | VM created in `us-west1-b`, commands used `us-central1-a` | `gcloud compute instances list`, use that zone |
+| `could not parse resource []` | ran `gcloud` **inside the VM**, where `$ZONE` is unset | `exit` to Cloud Shell first |
+| Redis secret contained `<your redis password>` | placeholder pasted literally | add a new secret version with the real value |
+| `actAs` permission denied on deploy | runtime service account not created yet | step 4 |
+| `the --mount option requires BuildKit` | old Dockerfile syntax | fixed in the Dockerfiles (#4) |
+| redirect "failed to start and listen on the port" | Neon database named `virallink_redierct` | logs showed `database ... does not exist`; recreate with the right name |
+| curl shows Google's 404 robot page | typo `us-west.run.app` | `us-west1` |
+| curl prints nothing | missing `https://` | add it |
+| user service: every request 500, logs "Bad authority" | `FRONTEND_URL=https://<name>.vercel.app` left from the template | `gcloud run services update ... --update-env-vars` |
+| Login button goes to `localhost:8080` | domain served preview builds without Production variables | attach the domain to Production, redeploy without cache |
+| Vercel login wall in incognito | preview deployments are protected | same: the production domain is public |
+
+## Cost
+
+| Item | Monthly |
+|---|---|
+| Vercel Hobby (personal, non-commercial use) | $0 |
+| Neon free tier | $0 |
+| Redis VM (one free-tier `e2-micro` + 30 GB standard disk) | $0 |
+| Cloud Run user + redirect, scale to zero, request-based | ~$0 at low traffic (free tier) |
+| Artifact Registry, Secret Manager, Cloud Build | cents at this scale |
+| analytics as an always-on instance (if deployed today) | ~$40-50 (avoid with the on-demand change) |
+
+Set a budget alert: Billing → Budgets & alerts. It emails you; it does not stop spending. `--max-instances` caps
+how far each service can scale.
+
+## Known risks
+
+- **`ddl-auto=update`** in production: every start may alter the live schema; nothing is ever dropped or renamed.
+  Move to Flyway migrations before real users; meanwhile `SPRING_JPA_HIBERNATE_DDL_AUTO=validate` once the schema is stable.
+- **analytics must run as a single instance** (fixed consumer name in the Redis consumer group).
+- **Redis VM**: you own updates and backups; losing its disk loses queued clicks and logs everyone out.
+- **Client IP**: redirect takes it from `X-Forwarded-For` behind Cloud Run's proxy. Check once that stored IPs
+  (anonymised `a.b.c.0`) are visitors', not Google's.
+- **Safe Browsing**: without `SAFE_BROWSING_API_KEY`, links are created without the safety check.
+- **Sessions in Redis are Java-serialized**: keep Redis private and password-protected.

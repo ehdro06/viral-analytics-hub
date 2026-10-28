@@ -1,7 +1,9 @@
 name: Deploy to Cloud Run
 
-# PROPOSAL, manual trigger only: this never runs on push or pull_request.
-# Prerequisites (one-time, see docs/DEPLOY.md "CI/CD"): Artifact Registry repository, Workload Identity Federation
+# ALTERNATIVE to the Cloud Build triggers in docs/DEPLOY.md ("Automatic deploys"), which are the recommended setup.
+# Manual trigger only: this never runs on push or pull_request. The Workload Identity Federation setup commands are in
+# the first version of docs/DEPLOY.md (commit d030a9f, section "CI/CD").
+# Prerequisites (one-time): Artifact Registry repository, Workload Identity Federation
 # pool + provider for this repo, a deploy service account, the repository variables below, and a first manual
 # `gcloud run deploy` per service (that is where env vars and Secret Manager secrets are attached; this workflow
 # only rolls out a new image and re-applies the scaling settings, so existing env/secrets are kept).
@@ -88,7 +90,7 @@ jobs:
           docker push "$IMAGE"
           echo "IMAGE=$IMAGE" >> "$GITHUB_ENV"
 
-      # Scaling per docs/DEPLOY.md "Cloud Run settings":
+      # Scaling (see docs/DEPLOY.md, step 5 and "Analytics"):
       #   analytics: Redis Streams consumer with a fixed consumer name -> exactly one instance, CPU always allocated
       #   redirect:  keep one warm instance (JVM cold starts on the hot path)
       #   user:      scale to zero

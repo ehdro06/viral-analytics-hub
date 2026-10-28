@@ -113,32 +113,37 @@ JVM services need **`gradle.properties`** from `gradle.properties.example` (JDK 
 
 ---
 
-## What’s left to do (suggested priorities)
+## To-do list (current)
 
-### Must-have for real local E2E (owner still owes)
+**Deployed (Oct 2026):** frontend on Vercel (`https://vilnk.vercel.app`), user + redirect on Cloud Run (`us-west1`),
+Neon (`aws-us-west-2`), Redis on a free `e2-micro` VM. Analytics is **not** deployed yet. Setup: [DEPLOY.md](./DEPLOY.md).
+Done since the original handover: 1-hour JWT with silent renewal (#5), redirect answers 401 (#2), robots.txt (#3).
 
-1. Fill `.env`: at minimum `JWT_SECRET`, `API_KEY_SIGNING_SECRET`, `HASHIDS_SALT`.
-2. Configure **Google and/or GitHub OAuth** if testing browser login (GCP console ≠ JWT secrets).
-3. Smoke test per [LOCAL_DEV.md](./LOCAL_DEV.md): login → create link → hit short URL → Redis stream → dashboard counts.
+### Next (decided)
+- **Analytics without an always-on instance:** replace the 500 ms polling with an on-demand drain (Cloud Scheduler
+  every minute, or click-triggered via Cloud Tasks), scale to zero, request-based billing. Then deploy analytics.
+- **Link status management:** owner can pause a link or set an expiry; paused/expired links stop redirecting.
+  Replaces the hardcoded `active` badge (`use-links.ts`).
+- **Automatic backend deploys:** Cloud Build triggers per service using `cloudbuild.yaml` ([DEPLOY.md](./DEPLOY.md#automatic-deploys-cloud-build-triggers)).
+- **Free vs Pro:** decide plan limits (`User.tier` exists; UI always shows FREE), then enforce them.
+- **Rate limiting:** link creation and the URL expander (which spends Safe Browsing quota). Per user/IP, shared via Redis.
 
-### Product / engineering gaps
+### Housekeeping
+- Reset the Neon password (it was shared in a chat) and add it as a new `DB_PASSWORD` secret version.
+- GCP budget alert; Vercel standard Deployment Protection back on; publish the Google OAuth consent screen.
+- Safe Browsing key for redirect (`SAFE_BROWSING_API_KEY`): link creation and the expander skip the check without it.
+- GeoLite2 file into a private Cloud Storage bucket, mounted into analytics once it is deployed.
+- Replace `spring.jpa.hibernate.ddl-auto=update` with Flyway migrations before real users.
 
-- **API key validation in Redis** (SHA-256 cache) — explicitly **deferred** in `click-events-stream.md`; keys are HMAC self-contained in JWT filters today, hashes stored in Postgres on create only.
-- **Link status** — frontend hardcodes `active` (`use-links.ts` TODO).
-- **LinksTable UI** still displays `vrl.ink/{code}` in places while copy uses `REDIRECT_BASE_URL` — cosmetic inconsistency.
-- **Billing / tiers** — `User.tier` exists; UI always shows FREE.
-- **Production deploy** — prepared for Vercel + Cloud Run + Neon, not yet performed: [DEPLOY.md](./DEPLOY.md). No Terraform.
-- **CI on Windows/UNC** — Gradle file watching can fail on network paths; document or set `org.gradle.vfs.watch=false`.
-- **Vitest** — config excluded from Next typecheck; add `@vitejs/plugin-react-swc` or remove `vitest.config.ts` if tests are wanted in CI.
-- **Push to origin** — confirm whether `main` on GitHub has latest commits.
-
-### Nice-to-have
-
-- Refresh token / shorter JWT TTL + silent refresh.
-- Revoke/delete API keys endpoint.
-- Rate limiting on expander and link creation.
-- GeoIP path (`GEOLITE_PATH`) for richer analytics.
-- Custom domains, WebSockets, Stripe — **out of scope** per README.
+### Later
+- **Custom short domains** (customers use their own domain, e.g. `go.acme.com/x`): DNS verification, per-domain
+  TLS certificates, routing by Host. Out of scope for now.
+- **API key revocation:** needs a lookup on every use (Redis cache of key hashes); keys are self-verifying today.
+- Destination health checks (broken/unsafe target URLs) as a periodic job.
+- A short domain for ViralLink itself (short links currently use the long Cloud Run URL).
+- Unused code from the older auth design: `OAuth2LoginSuccessHandler`, `/auth/callback` page.
+- Vitest config excluded from the Next typecheck (missing `@vitejs/plugin-react-swc`).
+- WebSockets, Stripe billing: out of scope.
 
 ---
 

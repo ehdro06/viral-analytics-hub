@@ -1,0 +1,36 @@
+# Build one backend service and roll it out to Cloud Run. Used by one Cloud Build trigger per service
+# (push to main, "Included files" = <service>/**, substitution _SERVICE = user | redirect | analytics).
+# Only the image changes on deploy: env vars, secrets, network and scaling stay as configured on the service.
+# Setup: docs/DEPLOY.md "Automatic deploys (Cloud Build triggers)".
+
+substitutions:
+  _SERVICE: user
+  _REGION: us-west1
+  _REPO: virallink
+
+steps:
+  - id: build
+    name: gcr.io/cloud-builders/docker
+    dir: ${_SERVICE}
+    args: ["build", "-t", "${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPO}/${_SERVICE}:${SHORT_SHA}", "."]
+
+  - id: push
+    name: gcr.io/cloud-builders/docker
+    args: ["push", "${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPO}/${_SERVICE}:${SHORT_SHA}"]
+
+  - id: deploy
+    name: gcr.io/google.com/cloudsdktool/cloud-sdk:slim
+    entrypoint: gcloud
+    args:
+      - run
+      - deploy
+      - ${_SERVICE}
+      - --image=${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPO}/${_SERVICE}:${SHORT_SHA}
+      - --region=${_REGION}
+      - --quiet
+
+images:
+  - ${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPO}/${_SERVICE}:${SHORT_SHA}
+
+options:
+  logging: CLOUD_LOGGING_ONLY

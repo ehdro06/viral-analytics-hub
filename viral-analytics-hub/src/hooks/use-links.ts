@@ -1,7 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuthStore } from "./use-auth-store";
 import { authFetch } from "@/lib/auth-fetch";
-import { LinkItem } from "@/lib/types";
+import { LinkItem, LinkStatus } from "@/lib/types";
 
 // Shape returned by the redirect service
 interface BackendLink {
@@ -11,6 +11,15 @@ interface BackendLink {
   createdAt: string;
   userId: number;
   clickCount?: number; // enriched from Redis counters
+  paused?: boolean;
+  expiresAt?: string | null;
+  status?: LinkStatus; // computed by the redirect service
+}
+
+export interface LinkStatusUpdate {
+  id: string;
+  paused: boolean;
+  expiresAt: string | null;
 }
 
 const mapBackendToFrontend = (link: BackendLink): LinkItem => ({
@@ -19,6 +28,9 @@ const mapBackendToFrontend = (link: BackendLink): LinkItem => ({
   originalUrl: link.longUrl,
   totalClicks: link.clickCount ?? 0,
   createdAt: link.createdAt,
+  status: link.status ?? "active",
+  paused: link.paused ?? false,
+  expiresAt: link.expiresAt ?? null,
 });
 
 /** Backend validation errors carry a human-readable message: surface it instead of a generic failure. */
@@ -68,6 +80,9 @@ export function useLinks() {
           originalUrl: newUrl,
           totalClicks: 0,
           createdAt: new Date().toISOString(),
+          status: "active",
+          paused: false,
+          expiresAt: null,
           pending: true,
         },
         ...old,
@@ -111,8 +126,27 @@ export function useLinks() {
     },
   });
 
+  // Pause/resume and expiry: both fields are always sent (the backend sets both)
+  const updateStatusMutation = useMutation({
+    mutationFn: async ({ id, paused, expiresAt }: LinkStatusUpdate) => {
+      const res = await authFetch(`/api/v1/links/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ paused, expiresAt }),
+      });
+      if (!res.ok) throw await errorFrom(res, "Failed to update link");
+      return mapBackendToFrontend(await res.json());
+    },
+    onSuccess: (updated) => {
+      queryClient.setQueryData<LinkItem[]>(["links"], (old = []) =>
+        old.map((link) => (link.id === updated.id ? { ...link, ...updated, totalClicks: link.totalClicks } : link))
+      );
+    },
+  });
+
   return {
     links,
+    updateLinkStatus: updateStatusMutation.mutateAsync,
     isLoading: isPending,
     createLink: createMutation.mutateAsync,
     deleteLink: deleteMutation.mutateAsync,

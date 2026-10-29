@@ -44,19 +44,6 @@ public class RedirectController {
             <p>The owner has paused it or it has expired.</p></main></body></html>
             """;
 
-    // Shown for paused or expired links. Plain inline HTML: this service has no template engine.
-    static final String INACTIVE_PAGE = """
-            <!doctype html>
-            <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-            <title>Link no longer active</title>
-            <style>body{margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;
-            font-family:system-ui,-apple-system,sans-serif;background:#09090b;color:#e4e4e7}
-            main{max-width:28rem;padding:2rem;text-align:center}h1{font-size:1.25rem;margin:0 0 .5rem}
-            p{margin:0;color:#a1a1aa;line-height:1.5}</style></head>
-            <body><main><h1>This link is no longer active</h1>
-            <p>The owner has paused it or it has expired.</p></main></body></html>
-            """;
-
     @GetMapping("/{shortCode}")
     public ResponseEntity<?> redirect(@PathVariable("shortCode") String shortCode, HttpServletRequest request) {
         log.debug("Redirect request: {}", shortCode);

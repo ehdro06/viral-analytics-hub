@@ -38,6 +38,11 @@ export function UrlExpander() {
     try {
       // Direct call to the proxy configured in next.config.ts which forwards to 8081
       const res = await fetch(`/api/v1/expand?url=${encodeURIComponent(url)}`);
+      if (res.status === 429) {
+        const body = await res.json().catch(() => null);
+        setError(body?.message ?? 'Too many lookups. Please wait a minute and try again.');
+        return;
+      }
       if (!res.ok) {
         throw new Error('Failed to expand URL');
       }

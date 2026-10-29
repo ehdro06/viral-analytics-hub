@@ -130,7 +130,7 @@ Done since the original handover: 1-hour JWT with silent renewal (#5), redirect 
   300/min overall), Redis counters. Expander calls through Vercel share Vercel's IPs, so anonymous per-IP limits are coarse.
 
 ### Housekeeping
-- Reset the Neon password (it was shared in a chat) and add it as a new `DB_PASSWORD` secret version.
+- Neon password was reset; the secret is now `db-password` (env var `DB_PASSWORD`).
 - GCP budget alert; Vercel standard Deployment Protection back on; publish the Google OAuth consent screen.
 - Safe Browsing key for redirect (`SAFE_BROWSING_API_KEY`): link creation and the expander skip the check without it.
 - GeoLite2 file into a private Cloud Storage bucket, mounted into analytics once it is deployed.

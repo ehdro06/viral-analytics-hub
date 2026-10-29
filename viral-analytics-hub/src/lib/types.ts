@@ -2,12 +2,19 @@
 //   redirect  -> Link (LinkItem is the mapped form, see hooks/use-links.ts)
 //   analytics -> AnalyticsSummaryResponse
 
+/** active = redirects; paused = stopped by the owner; expired = past its expiry date. */
+export type LinkStatus = "active" | "paused" | "expired";
+
 export interface LinkItem {
   id: string;
   shortCode: string;
   originalUrl: string;
   totalClicks: number;
   createdAt: string;
+  status: LinkStatus;
+  paused: boolean;
+  /** ISO instant after which the link stops redirecting, or null for no expiry. */
+  expiresAt: string | null;
   /** True for the optimistic placeholder shown while the create request is in flight. */
   pending?: boolean;
 }

@@ -7,6 +7,7 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 import org.hibernate.annotations.CreationTimestamp;
 
+import java.time.Instant;
 import java.time.LocalDateTime;
 
 @Entity
@@ -36,6 +37,24 @@ public class Link {
     @Column(nullable = false)
     private Long userId; 
 
+    /** Paused by the owner: stops redirecting until resumed. The DB default lets ddl-auto add it to existing rows. */
+    @Column(nullable = false, columnDefinition = "boolean not null default false")
+    private boolean paused;
+
+    /** Optional end of life: from this instant on the link stops redirecting. */
+    private Instant expiresAt;
+
     @Transient
     private long clickCount;
+
+    /** "active", "paused" or "expired", as shown in the dashboard (serialized as {@code status}). */
+    public String getStatus() {
+        if (paused) return "paused";
+        if (isExpiredAt(expiresAt, Instant.now())) return "expired";
+        return "active";
+    }
+
+    public static boolean isExpiredAt(Instant expiresAt, Instant now) {
+        return expiresAt != null && !now.isBefore(expiresAt);
+    }
 }

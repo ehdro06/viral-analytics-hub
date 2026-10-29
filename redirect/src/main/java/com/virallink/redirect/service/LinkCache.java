@@ -5,7 +5,10 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Component;
 
+import com.virallink.redirect.model.Link;
+
 import java.time.Duration;
+import java.time.Instant;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -29,8 +32,20 @@ public class LinkCache {
     private static final String F_URL = "url";
     private static final String F_OWNER = "owner";
     private static final String F_MISSING = "missing";
+    private static final String F_PAUSED = "paused";
+    private static final String F_EXPIRES = "expires"; // epoch millis
 
-    public record Entry(String longUrl, Long ownerId) {}
+    /** What the hot path needs: where to go, whom to credit, and whether the link may redirect right now. */
+    public record Entry(String longUrl, Long ownerId, boolean paused, Instant expiresAt) {
+
+        public static Entry of(Link link) {
+            return new Entry(link.getLongUrl(), link.getUserId(), link.isPaused(), link.getExpiresAt());
+        }
+
+        public boolean activeAt(Instant now) {
+            return !paused && !Link.isExpiredAt(expiresAt, now);
+        }
+    }
 
     public enum Status { HIT, KNOWN_MISSING, UNKNOWN }
 
@@ -50,7 +65,11 @@ public class LinkCache {
             Object url = fields.get(F_URL);
             Object owner = fields.get(F_OWNER);
             if (url == null || owner == null) return Lookup.UNKNOWN;
-            return new Lookup(Status.HIT, new Entry(url.toString(), Long.valueOf(owner.toString())));
+            // Entries written before pause/expiry existed lack these fields: they mean "active, no expiry"
+            Object expires = fields.get(F_EXPIRES);
+            return new Lookup(Status.HIT, new Entry(url.toString(), Long.valueOf(owner.toString()),
+                    "1".equals(fields.get(F_PAUSED)),
+                    expires == null ? null : Instant.ofEpochMilli(Long.parseLong(expires.toString()))));
         } catch (Exception e) {
             log.warn("Link cache read failed for {}: {}", shortCode, e.getMessage());
             return Lookup.UNKNOWN;
@@ -61,6 +80,8 @@ public class LinkCache {
         Map<String, String> fields = new HashMap<>();
         fields.put(F_URL, entry.longUrl());
         fields.put(F_OWNER, String.valueOf(entry.ownerId()));
+        if (entry.paused()) fields.put(F_PAUSED, "1");
+        if (entry.expiresAt() != null) fields.put(F_EXPIRES, String.valueOf(entry.expiresAt().toEpochMilli()));
         write(shortCode, fields, TTL);
     }
 

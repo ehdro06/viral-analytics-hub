@@ -126,7 +126,8 @@ Done since the original handover: 1-hour JWT with silent renewal (#5), redirect 
   Replaces the hardcoded `active` badge (`use-links.ts`).
 - **Automatic backend deploys:** Cloud Build triggers per service using `cloudbuild.yaml` ([DEPLOY.md](./DEPLOY.md#automatic-deploys-cloud-build-triggers)).
 - **Free vs Pro:** decide plan limits (`User.tier` exists; UI always shows FREE), then enforce them.
-- **Rate limiting:** link creation and the URL expander (which spends Safe Browsing quota). Per user/IP, shared via Redis.
+- **Rate limiting:** done for link creation (per user, 20/min, 500/day) and the URL expander (per user or IP 20/min,
+  300/min overall), Redis counters. Expander calls through Vercel share Vercel's IPs, so anonymous per-IP limits are coarse.
 
 ### Housekeeping
 - Neon password was reset; the secret is now `db-password` (env var `DB_PASSWORD`).

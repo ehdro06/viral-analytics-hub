@@ -108,6 +108,8 @@ the value). Plain values go in `--set-env-vars`. `PORT` is set by Cloud Run; nev
 | `OAUTH2_REDIRECT_BASE_URL` | | (✓) | | | optional, defaults to `FRONTEND_URL` |
 | `JWT_EXPIRATION_MS` | | (✓) | | | optional, default `3600000` (1 hour) |
 | `DB_POOL_MAX_SIZE` | | (✓) | (✓) | (✓) | optional, default `5` |
+| `RATE_LIMIT_LINKS_PER_MINUTE` / `_PER_DAY` | | | (✓) | | optional, defaults `20` / `500` per user (`0` = off) |
+| `RATE_LIMIT_EXPAND_PER_MINUTE` / `RATE_LIMIT_EXPAND_GLOBAL_PER_MINUTE` | | | (✓) | | optional, defaults `20` per user or IP / `300` overall |
 | `GEOLITE_PATH` | | | | (✓) | set in the image; override when mounting the file |
 | `SPONGE_TRIGGER_TOKEN` | ✓ `sponge-trigger-token` | | | ✓ | shared with the Cloud Scheduler job; without it the drain endpoint is off |
 | `SPONGE_MODE` | | | | (✓) | `on-demand` in the prod profile, `poll` locally |

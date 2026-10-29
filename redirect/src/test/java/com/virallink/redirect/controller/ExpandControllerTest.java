@@ -7,6 +7,8 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
+import com.virallink.redirect.config.RateLimitConfig;
+import com.virallink.redirect.service.RateLimiter;
 import org.springframework.test.web.servlet.MockMvc;
 
 import java.util.List;
@@ -18,7 +20,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @WebMvcTest(ExpandController.class)
-@AutoConfigureMockMvc(addFilters = false) // Disable security filters for this pure unit test
+@AutoConfigureMockMvc(addFilters = false)
+@org.springframework.context.annotation.Import(RateLimitConfig.class) // Disable security filters for this pure unit test
 class ExpandControllerTest {
 
     @Autowired
@@ -26,6 +29,9 @@ class ExpandControllerTest {
 
     @MockitoBean
     private UrlExpandService urlExpandService;
+
+    @MockitoBean
+    private RateLimiter rateLimiter;
 
     @Test
     void testExpand_SuccessfulAndSafe_ReturnsOk() throws Exception {

@@ -15,9 +15,11 @@ import org.springframework.stereotype.Component;
 public class SpongeScheduler {
 
     private final AnalyticsSpongeService spongeService;
+    private final RetentionService retentionService;
 
     @Scheduled(fixedDelay = 500)
     public void poll() {
         spongeService.spongeEvents();
+        retentionService.purgeIfDue(); // at most once a day
     }
 }

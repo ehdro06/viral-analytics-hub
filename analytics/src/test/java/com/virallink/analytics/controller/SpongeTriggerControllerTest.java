@@ -3,6 +3,7 @@ package com.virallink.analytics.controller;
 import com.virallink.analytics.config.JwtAuthenticationFilter;
 import com.virallink.analytics.config.SecurityConfig;
 import com.virallink.analytics.service.AnalyticsSpongeService;
+import com.virallink.analytics.service.RetentionService;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -34,6 +35,9 @@ class SpongeTriggerControllerTest {
 
         @MockitoBean
         private AnalyticsSpongeService spongeService;
+
+        @MockitoBean
+        private RetentionService retentionService;
 
         @Test
         void correctToken_DrainsAndReportsCount() throws Exception {
@@ -70,6 +74,9 @@ class SpongeTriggerControllerTest {
 
         @MockitoBean
         private AnalyticsSpongeService spongeService;
+
+        @MockitoBean
+        private RetentionService retentionService;
 
         @Test
         void endpointIsDisabled() throws Exception {

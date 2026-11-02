@@ -8,7 +8,9 @@ import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Component;
@@ -26,10 +28,16 @@ import java.util.Collections;
 @Component
 public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
-    private final SecretKey signingKey;
+    // Set by the user service when an account is deleted (see UserService.DELETED_USER_KEY_PREFIX)
+    private static final String DELETED_USER_KEY_PREFIX = "auth:deleted-user:";
 
-    public JwtAuthenticationFilter(@Value("${jwt.secret}") String secret) {
+    private final SecretKey signingKey;
+    // Optional so web-slice tests run without Redis
+    private final ObjectProvider<StringRedisTemplate> redis;
+
+    public JwtAuthenticationFilter(@Value("${jwt.secret}") String secret, ObjectProvider<StringRedisTemplate> redis) {
         this.signingKey = Keys.hmacShaKeyFor(Decoders.BASE64.decode(secret));
+        this.redis = redis;
     }
 
     @Override
@@ -46,7 +54,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                         .getPayload();
 
                 Long userId = claims.get("userId", Long.class);
-                if (userId != null) {
+                if (userId != null && !isDeleted(userId)) {
                     SecurityContextHolder.getContext().setAuthentication(
                             new UsernamePasswordAuthenticationToken(userId, null, Collections.emptyList()));
                 }
@@ -55,5 +63,17 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             }
         }
         chain.doFilter(request, response);
+    }
+
+    /** A deleted account's JWT stays valid until it expires; refuse it. Fails open if Redis is unreachable. */
+    private boolean isDeleted(Long userId) {
+        StringRedisTemplate template = redis.getIfAvailable();
+        if (template == null) return false;
+        try {
+            return Boolean.TRUE.equals(template.hasKey(DELETED_USER_KEY_PREFIX + userId));
+        } catch (Exception e) {
+            logger.warn("Deleted-account check unavailable: " + e.getMessage());
+            return false;
+        }
     }
 }

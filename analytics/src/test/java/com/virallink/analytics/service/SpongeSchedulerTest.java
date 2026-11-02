@@ -10,6 +10,7 @@ class SpongeSchedulerTest {
 
     private final ApplicationContextRunner runner = new ApplicationContextRunner()
             .withBean(AnalyticsSpongeService.class, () -> mock(AnalyticsSpongeService.class))
+            .withBean(RetentionService.class, () -> mock(RetentionService.class))
             .withUserConfiguration(SpongeScheduler.class);
 
     @Test

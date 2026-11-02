@@ -20,6 +20,7 @@ import java.net.URI;
 import java.time.Instant;
 
 import java.util.List;
+import java.util.Map;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 
 @RestController
@@ -95,6 +96,12 @@ public class RedirectController {
         return linkService.updateStatus(id, userId, request.paused(), request.expiresAt())
                 .map(ResponseEntity::ok)
                 .orElse(ResponseEntity.notFound().build());
+    }
+
+    // Account deletion: remove all of the caller's links
+    @DeleteMapping("/api/v1/links")
+    public ResponseEntity<Map<String, Integer>> deleteAllLinks(@AuthenticationPrincipal Long userId) {
+        return ResponseEntity.ok(Map.of("deleted", linkService.deleteAllLinks(userId)));
     }
 
     @DeleteMapping("/api/v1/links/{id}")

@@ -1,5 +1,6 @@
 package com.virallink.user.service;
 
+import org.springframework.data.redis.core.StringRedisTemplate;
 import com.virallink.user.model.ApiKey;
 import com.virallink.user.model.User;
 import com.virallink.user.repository.ApiKeyRepository;
@@ -28,6 +29,13 @@ public class UserService {
 
     private final UserRepository userRepository;
     private final ApiKeyRepository apiKeyRepository;
+    private final StringRedisTemplate redisTemplate;
+
+    /**
+     * Redis key marking a deleted account. JWTs and API keys are verified without a database lookup, so redirect and
+     * analytics check this key and refuse credentials of a deleted user (keep the name in sync with their filters).
+     */
+    public static final String DELETED_USER_KEY_PREFIX = "auth:deleted-user:";
 
     @Value("${api.key.signing-secret}")
     private String apiKeySigningSecret;
@@ -91,6 +99,18 @@ public class UserService {
 
     public List<ApiKey> getApiKeys(User user) {
         return apiKeyRepository.findByUserId(user.getId());
+    }
+
+    /**
+     * Deletes the account and its API keys. The deletion is first recorded in Redis, so the user's still-valid JWTs
+     * and API keys stop working on every service; if Redis is unreachable nothing is deleted and the caller retries.
+     * Links and click data live in the redirect and analytics databases and are deleted there beforehand.
+     */
+    @Transactional
+    public void deleteAccount(User user) {
+        redisTemplate.opsForValue().set(DELETED_USER_KEY_PREFIX + user.getId(), "1");
+        apiKeyRepository.deleteAll(apiKeyRepository.findByUserId(user.getId()));
+        userRepository.delete(user);
     }
 
     private String hashKey(String key) {

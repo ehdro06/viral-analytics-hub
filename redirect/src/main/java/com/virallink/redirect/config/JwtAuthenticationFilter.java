@@ -8,8 +8,10 @@ import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.filter.OncePerRequestFilter;
@@ -31,6 +33,16 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
     @Value("${api.key.signing-secret}")
     private String apiKeySigningSecret;
+
+    // Optional so web-slice tests run without Redis
+    private final ObjectProvider<StringRedisTemplate> redis;
+
+    // Set by the user service when an account is deleted (see UserService.DELETED_USER_KEY_PREFIX)
+    private static final String DELETED_USER_KEY_PREFIX = "auth:deleted-user:";
+
+    public JwtAuthenticationFilter(ObjectProvider<StringRedisTemplate> redis) {
+        this.redis = redis;
+    }
 
     @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain)
@@ -61,7 +73,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             Long userId = claims.get("userId", Long.class);
             String email = claims.getSubject();
 
-            if (email != null && userId != null) {
+            if (email != null && userId != null && !isDeleted(userId)) {
                 UsernamePasswordAuthenticationToken authToken = new UsernamePasswordAuthenticationToken(
                         userId,
                         null,
@@ -81,7 +93,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         }
 
         Long userId = validateApiKeyAndExtractUserId(rawApiKey);
-        if (userId == null) {
+        if (userId == null || isDeleted(userId)) {
             return;
         }
 
@@ -91,6 +103,21 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                 Collections.emptyList()
         );
         SecurityContextHolder.getContext().setAuthentication(authToken);
+    }
+
+    /**
+     * JWTs and API keys are self-verifying, so a deleted account's credentials would stay valid until they expire
+     * (API keys never do). Fails open: if Redis is unreachable the credential is accepted as before.
+     */
+    private boolean isDeleted(Long userId) {
+        StringRedisTemplate template = redis.getIfAvailable();
+        if (template == null) return false;
+        try {
+            return Boolean.TRUE.equals(template.hasKey(DELETED_USER_KEY_PREFIX + userId));
+        } catch (Exception e) {
+            logger.warn("Deleted-account check unavailable: " + e.getMessage());
+            return false;
+        }
     }
 
     private Long validateApiKeyAndExtractUserId(String rawApiKey) {

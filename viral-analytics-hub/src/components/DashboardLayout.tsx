@@ -74,12 +74,16 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
     <div className="flex h-screen overflow-hidden bg-background">
       {/* Desktop Sidebar */}
       <aside className="hidden lg:flex flex-col w-60 border-r border-border bg-sidebar shrink-0">
-        <div className="flex items-center gap-2.5 px-5 h-16 border-b border-border">
+        <Link
+          href="/"
+          aria-label="ViralLink home"
+          className="flex items-center gap-2.5 px-5 h-16 border-b border-border hover:opacity-80 transition-opacity"
+        >
           <div className="w-8 h-8 rounded-lg bg-primary/15 flex items-center justify-center">
             <Zap className="w-4 h-4 text-primary" />
           </div>
           <span className="font-bold text-base tracking-tight text-foreground">ViralLink</span>
-        </div>
+        </Link>
         <nav className="flex-1 p-3 space-y-1">
           {NAV_ITEMS.map((item) => (
             <NavItem
@@ -111,12 +115,12 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
 
       {/* Mobile Header */}
       <div className="lg:hidden fixed top-0 left-0 right-0 z-50 h-16 bg-background border-b border-border px-4 flex items-center justify-between">
-        <div className="flex items-center gap-2.5">
+        <Link href="/" aria-label="ViralLink home" className="flex items-center gap-2.5">
           <div className="w-8 h-8 rounded-lg bg-primary/15 flex items-center justify-center">
             <Zap className="w-4 h-4 text-primary" />
           </div>
           <span className="font-bold text-base tracking-tight text-foreground">ViralLink</span>
-        </div>
+        </Link>
         <button
           onClick={() => setMobileOpen(true)}
           className="p-2 -mr-2 text-muted-foreground hover:text-foreground"

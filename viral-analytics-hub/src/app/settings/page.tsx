@@ -16,6 +16,7 @@ import { useUser } from "@/hooks/use-user";
 import { Copy, KeyRound, Loader2, LogOut, Plus } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
+import { formatDate } from "@/lib/format";
 
 export default function SettingsPage() {
   const { user, logout } = useUser();
@@ -103,7 +104,7 @@ export default function SettingsPage() {
                       {k.prefix.slice(0, 12)}…
                     </span>
                     <span className="text-muted-foreground text-xs shrink-0">
-                      {k.createdAt ? new Date(k.createdAt).toLocaleDateString() : "—"}
+                      {k.createdAt ? formatDate(k.createdAt) : "—"}
                     </span>
                   </li>
                 ))}

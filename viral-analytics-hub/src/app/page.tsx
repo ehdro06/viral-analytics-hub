@@ -93,7 +93,7 @@ export default function LandingPage() {
           <div className="max-w-3xl mx-auto space-y-8">
             <h2 className="text-3xl font-bold tracking-tight sm:text-4xl text-slate-50">Ready to take control?</h2>
             <p className="text-xl text-muted-foreground">
-              Join thousands of marketers and developers using ViralLink to manage their links.
+              Free while in beta. Sign in with Google or GitHub and create your first link in seconds.
             </p>
             <Link href="/login">
               <Button size="lg" className="h-14 px-8 text-lg rounded-full shadow-lg hover:shadow-xl transition-all">
@@ -105,41 +105,19 @@ export default function LandingPage() {
       </main>
 
       {/* Footer */}
-      <footer className="border-t border-slate-800 bg-slate-950 py-12">
-        <div className="container mx-auto px-4 grid md:grid-cols-4 gap-8">
-          <div className="space-y-4">
-            <h3 className="font-bold text-lg text-slate-100">ViralLink</h3>
-            <p className="text-sm text-slate-400">
-              The modern link management platform for growth teams.
-            </p>
-          </div>
+      <footer className="border-t border-slate-800 bg-slate-950 py-10">
+        <div className="container mx-auto px-4 flex flex-col sm:flex-row gap-6 sm:items-center justify-between text-sm text-slate-400">
           <div>
-            <h4 className="font-semibold mb-4 text-slate-100">Product</h4>
-            <ul className="space-y-2 text-sm text-slate-400">
-              <li><Link href="#" className="hover:text-blue-400 transition-colors">Features</Link></li>
-              <li><Link href="#" className="hover:text-blue-400 transition-colors">Pricing</Link></li>
-              <li><Link href="#" className="hover:text-blue-400 transition-colors">API</Link></li>
-            </ul>
+            <p className="font-bold text-slate-100">ViralLink</p>
+            <p className="mt-1">Short links with click analytics. Free while in beta.</p>
           </div>
-          <div>
-            <h4 className="font-semibold mb-4 text-slate-100">Company</h4>
-            <ul className="space-y-2 text-sm text-slate-400">
-              <li><Link href="#" className="hover:text-blue-400 transition-colors">About</Link></li>
-              <li><Link href="#" className="hover:text-blue-400 transition-colors">Blog</Link></li>
-              <li><Link href="#" className="hover:text-blue-400 transition-colors">Careers</Link></li>
-            </ul>
-          </div>
-          <div>
-            <h4 className="font-semibold mb-4 text-slate-100">Legal</h4>
-            <ul className="space-y-2 text-sm text-slate-400">
-              <li><Link href="#" className="hover:text-blue-400 transition-colors">Privacy</Link></li>
-              <li><Link href="#" className="hover:text-blue-400 transition-colors">Terms</Link></li>
-            </ul>
-          </div>
+          <nav className="flex flex-wrap gap-x-6 gap-y-2">
+            <Link href="/privacy" className="hover:text-blue-400 transition-colors">Privacy Policy</Link>
+            <Link href="/terms" className="hover:text-blue-400 transition-colors">Terms of Service</Link>
+            <a href="mailto:ideal3339@gmail.com" className="hover:text-blue-400 transition-colors">Contact</a>
+          </nav>
         </div>
-        <div className="container mx-auto px-4 mt-8 pt-8 border-t border-slate-800 text-center text-sm text-slate-500">
-          © 2026 ViralLink Inc. All rights reserved.
-        </div>
+        <p className="container mx-auto px-4 mt-8 text-center text-xs text-slate-500">© 2026 ViralLink</p>
       </footer>
     </div>
   );

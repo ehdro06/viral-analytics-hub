@@ -12,8 +12,11 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { useApiKeys } from "@/hooks/use-api-keys";
+import { useDeleteAccount } from "@/hooks/use-delete-account";
 import { useUser } from "@/hooks/use-user";
-import { Copy, KeyRound, Loader2, LogOut, Plus } from "lucide-react";
+import { Copy, KeyRound, Loader2, LogOut, Plus, Trash2 } from "lucide-react";
+import Link from "next/link";
+import { Input } from "@/components/ui/input";
 import { useState } from "react";
 import { toast } from "sonner";
 import { formatDate } from "@/lib/format";
@@ -22,6 +25,9 @@ export default function SettingsPage() {
   const { user, logout } = useUser();
   const { keys, isLoading, createKey, isCreating, lastCreated, resetCreated } = useApiKeys();
   const [revealOpen, setRevealOpen] = useState(false);
+  const deleteAccount = useDeleteAccount();
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [deleteConfirm, setDeleteConfirm] = useState("");
 
   const handleCreateKey = async () => {
     try {
@@ -112,7 +118,68 @@ export default function SettingsPage() {
             )}
           </CardContent>
         </Card>
+
+        <Card className="border-destructive/40">
+          <CardHeader>
+            <CardTitle className="text-destructive">Delete account</CardTitle>
+            <CardDescription>
+              Permanently deletes your account, all your short links (they stop working), your API keys and all click
+              data of your links. This cannot be undone. See the{" "}
+              <Link href="/privacy" className="underline underline-offset-4">Privacy Policy</Link>.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Button variant="destructive" size="sm" className="gap-2" onClick={() => setDeleteOpen(true)}>
+              <Trash2 className="h-4 w-4" />
+              Delete my account
+            </Button>
+          </CardContent>
+        </Card>
       </div>
+
+      <Dialog
+        open={deleteOpen}
+        onOpenChange={(open) => {
+          if (deleteAccount.isPending) return;
+          setDeleteOpen(open);
+          if (!open) {
+            setDeleteConfirm("");
+            deleteAccount.reset();
+          }
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete your account?</DialogTitle>
+            <DialogDescription>
+              Your account, links, API keys and click data will be deleted immediately and cannot be recovered. Type{" "}
+              <strong>DELETE</strong> to confirm.
+            </DialogDescription>
+          </DialogHeader>
+          <Input
+            aria-label="Type DELETE to confirm"
+            value={deleteConfirm}
+            onChange={(e) => setDeleteConfirm(e.target.value)}
+            placeholder="DELETE"
+            autoComplete="off"
+          />
+          {deleteAccount.error && <p className="text-sm text-destructive">{deleteAccount.error.message}</p>}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDeleteOpen(false)} disabled={deleteAccount.isPending}>
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              className="gap-2"
+              disabled={deleteConfirm !== "DELETE" || deleteAccount.isPending}
+              onClick={() => deleteAccount.mutate()}
+            >
+              {deleteAccount.isPending && <Loader2 className="h-4 w-4 animate-spin" />}
+              Delete permanently
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog
         open={revealOpen}

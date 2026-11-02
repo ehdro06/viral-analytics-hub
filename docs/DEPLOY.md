@@ -113,6 +113,7 @@ the value). Plain values go in `--set-env-vars`. `PORT` is set by Cloud Run; nev
 | `GEOLITE_PATH` | | | | (✓) | set in the image; override when mounting the file |
 | `SPONGE_TRIGGER_TOKEN` | ✓ `sponge-trigger-token` | | | ✓ | shared with the Cloud Scheduler job; without it the drain endpoint is off |
 | `SPONGE_MODE` | | | | (✓) | `on-demand` in the prod profile, `poll` locally |
+| `ANALYTICS_RETENTION_MONTHS` | | | | (✓) | Months click records are kept (default `12`, `0` = keep forever); must match the Privacy Policy |
 
 Instead of the four `REDIS_*` values you can set one secret `SPRING_DATA_REDIS_URL` (`redis://:<password>@<host>:6379`).
 

@@ -3,17 +3,18 @@
 How the live setup is built, step by step, with the exact commands that worked and the pitfalls hit on the way.
 Local development is unchanged: every setting falls back to its `localhost` value ([LOCAL_DEV.md](./LOCAL_DEV.md)).
 
-**Live setup (Oct 2026)**
+**Live setup (Nov 2026)**
 
 | Piece | Where | Address / name |
 |---|---|---|
 | Frontend | Vercel (Hobby), project `viral-analytics-hub` | `https://vilnk.vercel.app` |
-| user, redirect | Cloud Run, `us-west1`, project `virallink-487806` | `https://user-85302724166.us-west1.run.app`, `https://redirect-85302724166.us-west1.run.app` |
-| analytics | **not deployed yet**, ready to deploy on demand (see [Analytics](#analytics-not-deployed-yet)) | |
+| user, redirect, analytics | Cloud Run, `us-west1`, project `virallink-487806` | `https://user-85302724166.us-west1.run.app`, `https://redirect-85302724166.us-west1.run.app`, `https://analytics-85302724166.us-west1.run.app` |
+| Click drain | Cloud Scheduler job `analytics-drain`, every minute | see [Analytics](#analytics-on-demand-drain) |
 | PostgreSQL | Neon, `aws-us-west-2`, branch `production` | databases `virallink_user`, `virallink_redirect`, `virallink_analytics` |
 | Redis | free `e2-micro` VM `virallink-redis`, `us-west1-b`, private IP only | `10.138.0.2:6379` |
-| Images | Artifact Registry `us-west1-docker.pkg.dev/virallink-487806/virallink` | `user:<tag>`, `redirect:<tag>` |
+| Images | Artifact Registry `us-west1-docker.pkg.dev/virallink-487806/virallink` | `user:<tag>`, `redirect:<tag>`, `analytics:<tag>` (cleanup: older than 7 days, keep newest 3) |
 | Secrets | Secret Manager | see [Secrets](#secrets) |
+| Backend deploys | Cloud Build triggers `deploy-user`, `deploy-redirect`, `deploy-analytics` on push to `main` | see [Automatic deploys](#automatic-deploys-cloud-build-triggers) |
 
 Everything sits in **Oregon** (`us-west1` / Neon `aws-us-west-2`): the closest free-tier VM region to Korea, and
 Cloud Run, Redis and the database stay next to each other.
@@ -29,7 +30,8 @@ Cloud Run, Redis and the database stay next to each other.
 - [7. Check it works](#7-check-it-works)
 - [Updating a service](#updating-a-service)
 - [Automatic deploys (Cloud Build triggers)](#automatic-deploys-cloud-build-triggers)
-- [Analytics (not deployed yet)](#analytics-not-deployed-yet)
+- [Analytics (on-demand drain)](#analytics-on-demand-drain)
+- [Privacy and data deletion](#privacy-and-data-deletion)
 - [Pitfalls we hit](#pitfalls-we-hit)
 - [Cost](#cost)
 - [Known risks](#known-risks)
@@ -366,7 +368,7 @@ needed. Add `deploy-analytics` the same way once analytics is deployed.
 The GitHub Actions workflow `.github/workflows/deploy-cloud-run.yml` is a manual alternative (needs Workload Identity
 Federation); with triggers in place it is not needed.
 
-## Analytics (not deployed yet)
+## Analytics (on-demand drain)
 
 Analytics drains the click queue **on demand**: in production (`SPONGE_MODE=on-demand`, the prod-profile default)
 it does nothing until `POST /internal/sponge/drain` is called with the `X-Sponge-Token` header. Cloud Scheduler calls
@@ -400,7 +402,9 @@ gcloud scheduler jobs create http analytics-drain --location=us-west1 --schedule
 ```
 
 Then on Vercel add `ANALYTICS_SERVICE_URL` = the analytics URL and redeploy without build cache, and add a
-`deploy-analytics` trigger like the others.
+`deploy-analytics` trigger like the others. (All done on the live setup.)
+
+The same drain call also runs the [retention purge](#privacy-and-data-deletion) at most once a day.
 
 Check: `gcloud scheduler jobs run analytics-drain --location=us-west1`, then in Cloud Scheduler the job's last run
 shows success; click a short link and within a minute the dashboard counts it.
@@ -410,7 +414,8 @@ shows success; click a short link and within a minute the dashboard counts it.
 - If you rotate the token: add a new secret version, redeploy analytics, and update the job
   (`gcloud scheduler jobs update http analytics-drain --location=us-west1 --update-headers=X-Sponge-Token=...`).
 
-GeoLite2 (country/city): the `.mmdb` file must not go into git (MaxMind license). Plan: private bucket
+GeoLite2 (country/city): the `.mmdb` file must not go into git (MaxMind license). **Not uploaded yet**, so live
+geography shows "Unknown". Plan: private bucket
 `gs://virallink-487806-geoip` in `us-west1`, mounted into analytics:
 
 ```bash
@@ -422,6 +427,31 @@ gcloud run services update analytics --region=us-west1 \
 
 (plus `roles/storage.objectViewer` on the bucket for `virallink-run`). Without the file analytics still runs and
 records geography as "Unknown". MaxMind's license requires attribution and keeping the file reasonably current.
+
+## Privacy and data deletion
+
+The site publishes a [Privacy Policy](https://vilnk.vercel.app/privacy) (PIPA + GDPR) and [Terms](https://vilnk.vercel.app/terms)
+(`viral-analytics-hub/src/app/privacy`, `terms`). **Keep the policy in sync with the setup**: a new provider, a new
+region, a new kind of data or a different retention period means editing the policy and its "Last updated" date.
+
+**Account deletion** (Settings → Delete account) calls three services in this order, each idempotent, so a retry
+finishes a half-done deletion:
+
+| Step | Endpoint | Service | Deletes |
+|---|---|---|---|
+| 1 | `DELETE /api/v1/links` | redirect | all the user's links, their cache entries and click counters |
+| 2 | `DELETE /api/v1/analytics/me` | analytics | all click records of the user's links |
+| 3 | `DELETE /api/v1/users/me` | user | API keys and the account, then ends the session |
+
+Step 3 first writes `auth:deleted-user:{id}` to Redis (no expiry). redirect and analytics check that key, so the
+user's JWTs and API keys, which are self-verifying and would otherwise keep working until they expire, are refused
+at once. If Redis cannot be reached the check is skipped (fail-open), and the account delete itself is aborted if
+the key cannot be written.
+
+**Retention**: analytics deletes click records older than `ANALYTICS_RETENTION_MONTHS` (default `12`, `0` = keep
+forever). It runs after a drain, at most once per 24 hours (Redis key `analytics:retention:last-run`). The Privacy
+Policy states 12 months; change both together. If paid plans ever show longer history, retention must be at least
+as long as the longest plan.
 
 ## Pitfalls we hit
 
@@ -441,6 +471,8 @@ records geography as "Unknown". MaxMind's license requires attribution and keepi
 | `Permission denied on secret ... db-password` | secret recreated under a new name; the runtime account had no access to it | `gcloud secrets add-iam-policy-binding <secret> --member=serviceAccount:virallink-run@… --role=roles/secretmanager.secretAccessor`, then `--update-secrets` on each service. Never delete a secret a service still references: its next cold start fails |
 | Login button goes to `localhost:8080` | domain served preview builds without Production variables | attach the domain to Production, redeploy without cache |
 | Vercel login wall in incognito | preview deployments are protected | same: the production domain is public |
+| `gcloud` "The required property [project] is not currently set" | new Cloud Shell session | `gcloud config set project virallink-487806` |
+| Creating a link spins on "Creating..." forever, nothing saved | Vercel rewrote `/api/v1/links` via the `/api/v1/links/:path*` rule with an empty path, adding a trailing slash; Spring answers 404 | exact `/api/v1/links` rule before the `:path*` one in `next.config.ts` (#11); requests now also time out after 30 s |
 
 ## Cost
 

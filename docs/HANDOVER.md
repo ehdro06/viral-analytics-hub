@@ -115,31 +115,34 @@ JVM services need **`gradle.properties`** from `gradle.properties.example` (JDK 
 
 ## To-do list (current)
 
-**Deployed (Oct 2026):** frontend on Vercel (`https://vilnk.vercel.app`), user + redirect on Cloud Run (`us-west1`),
-Neon (`aws-us-west-2`), Redis on a free `e2-micro` VM. Analytics is **not** deployed yet. Setup: [DEPLOY.md](./DEPLOY.md).
-Done since the original handover: 1-hour JWT with silent renewal (#5), redirect answers 401 (#2), robots.txt (#3).
+**Deployed (Nov 2026):** frontend on Vercel (`https://vilnk.vercel.app`), user + redirect + analytics on Cloud Run
+(`us-west1`), Neon (`aws-us-west-2`), Redis on a free `e2-micro` VM, Cloud Scheduler `analytics-drain` every minute,
+Cloud Build triggers deploy each service on push to `main`. Setup: [DEPLOY.md](./DEPLOY.md).
 
-### Next (decided)
-- **Deploy analytics:** on-demand drain is built (Cloud Scheduler every minute, scale to zero); steps in
-  [DEPLOY.md](./DEPLOY.md#analytics-not-deployed-yet).
-- **Link status management:** owner can pause a link or set an expiry; paused/expired links stop redirecting.
-  Replaces the hardcoded `active` badge (`use-links.ts`).
-- **Automatic backend deploys:** Cloud Build triggers per service using `cloudbuild.yaml` ([DEPLOY.md](./DEPLOY.md#automatic-deploys-cloud-build-triggers)).
-- **Free vs Pro:** decide plan limits (`User.tier` exists; UI always shows FREE), then enforce them.
-- **Rate limiting:** done for link creation (per user, 20/min, 500/day) and the URL expander (per user or IP 20/min,
-  300/min overall), Redis counters. Expander calls through Vercel share Vercel's IPs, so anonymous per-IP limits are coarse.
+Done since the original handover: redirect answers 401 (#2), robots.txt (#3), Cloud Build-compatible Dockerfiles (#4),
+1-hour JWT with silent renewal (#5), on-demand analytics drain (#7), link pause/expiry with a "no longer active" page
+(#8), per-user rate limits (#9), request timeout + English-only dates + logo home link + single Sign in button and
+the link-creation 404 fix (#11), Privacy Policy / Terms / account deletion / 12-month click retention (#12).
+
+### Next (to decide)
+- **Free vs Pro:** what each plan gets (e.g. how much analytics history), then enforce it (`User.tier` exists; the UI
+  always shows FREE). Click-data retention (12 months) must stay at least as long as the longest plan's history.
+- **GeoLite2:** upload the `.mmdb` to the private bucket and mount it ([DEPLOY.md](./DEPLOY.md#analytics-on-demand-drain));
+  until then geography is "Unknown".
 
 ### Housekeeping
-- Neon password was reset; the secret is now `db-password` (env var `DB_PASSWORD`).
 - GCP budget alert; Vercel standard Deployment Protection back on; publish the Google OAuth consent screen.
 - Safe Browsing key for redirect (`SAFE_BROWSING_API_KEY`): link creation and the expander skip the check without it.
-- GeoLite2 file into a private Cloud Storage bucket, mounted into analytics once it is deployed.
 - Replace `spring.jpa.hibernate.ddl-auto=update` with Flyway migrations before real users.
+- Dedicated Cloud Build service account instead of the default one.
+- Optional: rotate `sponge-trigger-token` (steps in DEPLOY.md).
 
 ### Later
 - **Custom short domains** (customers use their own domain, e.g. `go.acme.com/x`): DNS verification, per-domain
   TLS certificates, routing by Host. Out of scope for now.
-- **API key revocation:** needs a lookup on every use (Redis cache of key hashes); keys are self-verifying today.
+- **API key revocation:** needs a lookup on every use (Redis cache of key hashes); keys are self-verifying today
+  (deleted accounts are already blocked through the Redis denylist).
+- Data export ("download my data") to complete the GDPR portability right; today it is by email request.
 - Destination health checks (broken/unsafe target URLs) as a periodic job.
 - A short domain for ViralLink itself (short links currently use the long Cloud Run URL).
 - Unused code from the older auth design: `OAuth2LoginSuccessHandler`, `/auth/callback` page.
@@ -156,11 +159,14 @@ Done since the original handover: 1-hour JWT with silent renewal (#5), redirect 
 4. **Redirect is hot path** — don’t add blocking DB/analytics work on 302 path; stream publish is async.
 5. **Stream ACK semantics** — ACK means “processed by sponge,” not “deleted from stream history”; see prior user education on PEL/ACK in transcript if debugging consumer lag.
 6. **Tests need Docker** for redirect/analytics `gradlew build` (Testcontainers Redis).
-7. **Spring Boot 4.1-M1** — early milestone; dependency quirks (e.g. redirect needed explicit Jackson starter).
+7. **Spring Boot 4.1.1** (GA) — Spring Session in Boot 4 needs `spring-boot-starter-session-data-redis`; redirect needs the explicit Jackson starter.
 8. **PowerShell** — use `;` not `&&` between commands on Windows.
 9. **pnpm** in `viral-analytics-hub` — use project `.npmrc` (hoisted linker); run install from that directory.
 10. **OAuth vs API keys** — login is for humans; API keys are for machines. Don’t expose key creation without JWT.
 11. **Honest marketing** — landing page was deliberately toned down; avoid re-adding enterprise/SSO/custom-domain claims unless implemented.
+12. **Privacy Policy is part of the system** — a new provider, region, data field or retention change means updating `src/app/privacy/page.tsx` too.
+13. **Vercel rewrites** — `/x/:path*` with an empty path forwards `/x/` (trailing slash), which Spring 404s; add an exact rule for the bare path first.
+14. **New per-user data** — add it to account deletion (redirect `DELETE /api/v1/links`, analytics `DELETE /api/v1/analytics/me`, user `DELETE /api/v1/users/me`).
 
 ---
 
@@ -174,6 +180,9 @@ Done since the original handover: 1-hour JWT with silent renewal (#5), redirect 
 | JWT filter (redirect/analytics) | `redirect/.../JwtAuthenticationFilter.java` (also validates `X-API-Key`) |
 | Frontend auth | `viral-analytics-hub/src/hooks/use-auth-store.ts`, `use-user.ts`, `lib/auth-fetch.ts`, `app/auth/callback/page.tsx`, `app/settings/page.tsx` |
 | BFF proxies | `viral-analytics-hub/next.config.ts` |
+| Deleted-account denylist | `user/.../UserService.deleteAccount`, `isDeleted` in both `JwtAuthenticationFilter`s |
+| Retention | `analytics/.../RetentionService.java` |
+| Privacy / Terms / deletion UI | `viral-analytics-hub/src/app/privacy`, `src/app/terms`, `src/hooks/use-delete-account.ts`, `src/app/settings/page.tsx` |
 
 ---
 

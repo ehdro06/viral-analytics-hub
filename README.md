@@ -7,7 +7,7 @@
 
 B2B URL shortener and click analytics platform. Short links resolve on a **decoupled redirect path** (302 first, analytics async); the dashboard polls scoped aggregates—no WebSockets in this MVP.
 
-**Status:** Local-dev MVP. Core flows work end-to-end. Deploy-ready for Vercel + Cloud Run + Neon (manual, see [docs/DEPLOY.md](docs/DEPLOY.md)); API-key Redis cache and billing are out of scope for now.
+**Status:** Live beta at **[vilnk.vercel.app](https://vilnk.vercel.app)**: Next.js on Vercel, the three Spring Boot services on Google Cloud Run (scale to zero, deployed by Cloud Build on every push to `main`), PostgreSQL on Neon, Redis on a private VM. Free while in beta; billing is out of scope for now.
 
 ## Architecture
 
@@ -77,7 +77,9 @@ Agent handover (what’s done, what’s next): **[docs/HANDOVER.md](docs/HANDOVE
 
 Click stream contract: **[docs/click-events-stream.md](docs/click-events-stream.md)**.
 
-Production deploy (Vercel, Cloud Run, Neon, Redis options): **[docs/DEPLOY.md](docs/DEPLOY.md)**.
+Production deploy (Vercel, Cloud Run, Neon, Redis): **[docs/DEPLOY.md](docs/DEPLOY.md)**.
+
+How the code works, journey by journey: **[docs/HOW_IT_WORKS.md](docs/HOW_IT_WORKS.md)**.
 
 ## Repository layout
 
@@ -95,14 +97,20 @@ Production deploy (Vercel, Cloud Run, Neon, Redis options): **[docs/DEPLOY.md](d
 
 - Async click pipeline: redirect publishes to Redis Stream `analytics:events`; analytics **batch sponge** persists with ack-after-write
 - **Tenant-scoped** analytics (`userId` / `linkId` on each event)
-- JWT-secured dashboard APIs; HMAC-signed API keys (`prefix.secret`)
+- JWT-secured dashboard APIs (1-hour tokens, silently renewed); HMAC-signed API keys (`prefix.secret`)
+- Link management: pause/resume, expiry dates; paused or expired links show a "no longer active" page (410)
+- Per-user rate limits on link creation and the URL expander (Redis counters, 429 + `Retry-After`)
+- Google Safe Browsing check on new links and in the public URL expander
+- Privacy by design: IPs anonymised before storage, click data kept 12 months, self-service account deletion,
+  [Privacy Policy](https://vilnk.vercel.app/privacy) (PIPA + GDPR)
+- Production analytics drains the click queue on demand (Cloud Scheduler, once a minute) so every service scales to zero
 - Frontend live polling (`refetchInterval` 10s, pauses in background)
 
 ## Out of scope (by design)
 
 - WebSockets / SSE for live clicks
 - Custom domains & SSL automation
-- Stripe / usage tiers
+- Stripe / usage tiers (`User.tier` exists; everyone is on the free plan)
 - Redis-backed API key validation (documented for a later phase)
 
 ## Contributing

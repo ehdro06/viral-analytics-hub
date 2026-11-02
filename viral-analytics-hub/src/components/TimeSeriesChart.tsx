@@ -10,6 +10,7 @@ import {
 } from "recharts";
 import { TimeSeriesPoint } from "@/lib/types";
 import { EmptyChart } from "@/components/DataState";
+import { formatHourLabel } from "@/lib/format";
 
 interface TimeSeriesChartProps {
   data: TimeSeriesPoint[];
@@ -20,11 +21,7 @@ export default function TimeSeriesChart({ data }: TimeSeriesChartProps) {
     () =>
       data.map((d) => ({
         ...d,
-        label: new Date(d.timestamp).toLocaleString([], {
-          month: "short",
-          day: "numeric",
-          hour: "numeric",
-        }),
+        label: formatHourLabel(d.timestamp),
       })),
     [data]
   );

@@ -1,5 +1,6 @@
 import { LinkItem } from "@/lib/types";
 import { shortLinkLabel, shortLinkUrl } from "@/lib/short-link";
+import { formatDate, formatDateTime } from "@/lib/format";
 import { motion } from "framer-motion";
 import { ExternalLink, Copy, MoreHorizontal, Trash2, Pause, Play, CalendarClock } from "lucide-react";
 import { toast } from "sonner";
@@ -17,12 +18,6 @@ interface LinksTableProps {
   onTogglePause?: (link: LinkItem) => void;
   onEditExpiry?: (link: LinkItem) => void;
 }
-
-const formatDate = (iso: string) =>
-  new Date(iso).toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" });
-
-const formatDateTime = (iso: string) =>
-  new Date(iso).toLocaleString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
 
 const STATUS_STYLES: Record<LinkItem["status"], string> = {
   active: "bg-emerald-500/10 text-emerald-400",

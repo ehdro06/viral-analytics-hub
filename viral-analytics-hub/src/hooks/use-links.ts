@@ -96,6 +96,9 @@ export function useLinks() {
       }
     },
     onSettled: () => {
+      // Drop the "Creating..." placeholder whatever happened. Before, it was only replaced when the reload below
+      // succeeded, so a failed reload left it on screen forever.
+      queryClient.setQueryData<LinkItem[]>(["links"], (old = []) => old.filter((link) => !link.pending));
       queryClient.invalidateQueries({ queryKey: ["links"] });
     },
   });

@@ -149,6 +149,22 @@ public class LinkService {
         return links;
     }
 
+    /** Deletes every link of a user (account deletion), with their cache entries and click counters. */
+    @Transactional
+    public int deleteAllLinks(Long userId) {
+        List<Link> links = linkRepository.findByUserId(userId);
+        linkRepository.deleteAll(links);
+        for (Link link : links) {
+            linkCache.evict(link.getShortCode());
+            try {
+                redisTemplate.delete(STATS_KEY_PREFIX + link.getShortCode() + ":clicks");
+            } catch (Exception e) {
+                log.warn("Could not delete click counter for {}: {}", link.getShortCode(), e.getMessage());
+            }
+        }
+        return links.size();
+    }
+
     @Transactional
     public void deleteLink(Long id, Long userId) {
         linkRepository.findByIdAndUserId(id, userId).ifPresent(link -> {

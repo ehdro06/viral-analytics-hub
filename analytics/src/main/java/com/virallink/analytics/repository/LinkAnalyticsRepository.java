@@ -3,7 +3,9 @@ package com.virallink.analytics.repository;
 import com.virallink.analytics.model.LinkAnalytics;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.repository.query.Param;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.stereotype.Repository;
 
 import java.time.LocalDateTime;
@@ -12,6 +14,18 @@ import java.util.List;
 /** Every query is scoped to one owner: a user must never see another user's clicks. */
 @Repository
 public interface LinkAnalyticsRepository extends JpaRepository<LinkAnalytics, Long> {
+
+    /** Account deletion: every click on the user's links. */
+    @Modifying
+    @Transactional
+    @Query("DELETE FROM LinkAnalytics a WHERE a.ownerId = :ownerId")
+    int deleteByOwner(@Param("ownerId") Long ownerId);
+
+    /** Retention: clicks recorded before {@code cutoff} (UTC). */
+    @Modifying
+    @Transactional
+    @Query("DELETE FROM LinkAnalytics a WHERE a.clickedAt < :cutoff")
+    int deleteOlderThan(@Param("cutoff") LocalDateTime cutoff);
 
     long countByOwnerId(Long ownerId);
 

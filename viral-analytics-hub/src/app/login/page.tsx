@@ -73,12 +73,12 @@ export default function LoginPage() {
             </div>
 
             <p className="px-8 text-center text-sm text-zinc-500">
-              By clicking continue, you agree to our{" "}
-              <Link href="#" className="underline underline-offset-4 hover:text-zinc-300 transition-colors">
+              By signing in, you agree to our{" "}
+              <Link href="/terms" className="underline underline-offset-4 hover:text-zinc-300 transition-colors">
                 Terms of Service
               </Link>{" "}
               and{" "}
-              <Link href="#" className="underline underline-offset-4 hover:text-zinc-300 transition-colors">
+              <Link href="/privacy" className="underline underline-offset-4 hover:text-zinc-300 transition-colors">
                 Privacy Policy
               </Link>
               .

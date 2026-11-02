@@ -1,6 +1,7 @@
 package com.virallink.analytics.controller;
 
 import com.virallink.analytics.service.AnalyticsSpongeService;
+import com.virallink.analytics.service.RetentionService;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -25,11 +26,13 @@ public class SpongeTriggerController {
     static final String TOKEN_HEADER = "X-Sponge-Token";
 
     private final AnalyticsSpongeService spongeService;
+    private final RetentionService retentionService;
     private final byte[] triggerToken;
 
-    public SpongeTriggerController(AnalyticsSpongeService spongeService,
+    public SpongeTriggerController(AnalyticsSpongeService spongeService, RetentionService retentionService,
                                    @Value("${analytics.sponge.trigger-token:}") String triggerToken) {
         this.spongeService = spongeService;
+        this.retentionService = retentionService;
         this.triggerToken = triggerToken.getBytes(StandardCharsets.UTF_8);
     }
 
@@ -41,6 +44,8 @@ public class SpongeTriggerController {
         if (token == null || !MessageDigest.isEqual(triggerToken, token.getBytes(StandardCharsets.UTF_8))) {
             return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
         }
-        return ResponseEntity.ok(Map.of("processed", spongeService.spongeEvents()));
+        int processed = spongeService.spongeEvents();
+        retentionService.purgeIfDue(); // at most once a day
+        return ResponseEntity.ok(Map.of("processed", processed));
     }
 }

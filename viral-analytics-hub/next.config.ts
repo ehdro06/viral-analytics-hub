@@ -19,7 +19,10 @@ const nextConfig: NextConfig = {
     return [
       // Expander (public utility)
       { source: "/api/v1/expand", destination: `${REDIRECT_SERVICE}/api/expand` },
-      // Link management
+      // Link management. The exact rule must come first: on Vercel, "/api/v1/links/:path*" with an empty :path*
+      // forwards to ".../api/v1/links/" (trailing slash), which Spring Boot 4 answers with 404, so listing and
+      // creating links failed in production while /api/v1/links/{id} worked.
+      { source: "/api/v1/links", destination: `${REDIRECT_SERVICE}/api/v1/links` },
       { source: "/api/v1/links/:path*", destination: `${REDIRECT_SERVICE}/api/v1/links/:path*` },
       // Analytics
       { source: "/api/v1/analytics/:path*", destination: `${ANALYTICS_SERVICE}/api/v1/analytics/:path*` },

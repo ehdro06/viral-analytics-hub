@@ -1,7 +1,7 @@
 'use client';
 
-import { useState } from 'react';
-import { ArrowRight, ShieldCheck, ShieldAlert, Loader2, Link as LinkIcon, History } from 'lucide-react';
+import { useRef, useState } from 'react';
+import { ArrowRight, ShieldCheck, ShieldAlert, Loader2, Link as LinkIcon, History, XCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -23,6 +23,7 @@ interface ExpandResult {
 
 export function UrlExpander() {
   const [url, setUrl] = useState('');
+  const inputRef = useRef<HTMLInputElement>(null);
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<ExpandResult | null>(null);
   const [error, setError] = useState('');
@@ -77,12 +78,26 @@ export function UrlExpander() {
           <form onSubmit={handleExpand} className="flex gap-4 flex-col sm:flex-row">
             <div className="relative flex-1 group">
               <LinkIcon className="absolute left-3 top-3.5 h-5 w-5 text-slate-500 group-focus-within:text-blue-400 transition-colors" />
-              <Input 
-                placeholder="Paste a shortened URL (e.g. bit.ly/xyz)..." 
-                className="pl-10 h-12 text-lg bg-slate-950/50 border-slate-700 text-slate-100 placeholder:text-slate-600 focus-visible:ring-blue-500/50 transition-all"
+              <Input
+                ref={inputRef}
+                placeholder="Paste a shortened URL (e.g. bit.ly/xyz)..."
+                className="pl-10 pr-10 h-12 text-lg bg-slate-950/50 border-slate-700 text-slate-100 placeholder:text-slate-600 focus-visible:ring-blue-500/50 transition-all"
                 value={url}
                 onChange={(e) => setUrl(e.target.value)}
               />
+              {url && (
+                <button
+                  type="button"
+                  aria-label="Clear"
+                  onClick={() => {
+                    setUrl('');
+                    inputRef.current?.focus();
+                  }}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 rounded-full text-slate-500 hover:text-slate-300 focus-visible:outline-none focus-visible:text-slate-300 transition-colors"
+                >
+                  <XCircle className="h-5 w-5" />
+                </button>
+              )}
             </div>
             <Button size="lg" type="submit" disabled={loading} className="h-12 px-8 bg-blue-600 hover:bg-blue-500 text-white shadow-[0_0_20px_-5px_rgba(37,99,235,0.5)] transition-all hover:scale-[1.02]">
               {loading ? <Loader2 className="mr-2 h-5 w-5 animate-spin" /> : 'Expand & Scan'}
@@ -135,7 +150,7 @@ export function UrlExpander() {
                     <div className="relative z-10 flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-slate-700 bg-slate-900 text-sm font-medium text-slate-400 shadow-sm group-hover:border-slate-600 transition-colors">
                       {i + 1}
                     </div>
-                    <div className="flex-1 space-y-1 pt-1">
+                    <div className="flex-1 min-w-0 space-y-1 pt-1">
                         <div className="flex items-center gap-2 flex-wrap">
                             <Badge variant="outline" className={
                                 hop.status >= 300 && hop.status < 400 ? 'border-orange-500/20 bg-orange-500/10 text-orange-400' :
@@ -146,10 +161,12 @@ export function UrlExpander() {
                             <span className="font-mono text-sm text-slate-300 break-all">{hop.url}</span>
                         </div>
                         {hop.location && (
-                             <div className="flex items-center gap-2 text-sm text-slate-500 pl-2 mt-2">
-                                <ArrowRight className="h-3 w-3" />
-                                <span className="text-xs">Redirects to:</span>
-                                <span className="font-mono text-xs text-slate-400">{hop.location}</span>
+                             <div className="flex flex-col sm:flex-row sm:items-start gap-1 sm:gap-2 text-sm text-slate-500 pl-2 mt-2">
+                                <span className="flex items-center gap-2 shrink-0">
+                                  <ArrowRight className="h-3 w-3" />
+                                  <span className="text-xs">Redirects to:</span>
+                                </span>
+                                <span className="font-mono text-xs text-slate-400 min-w-0 break-all">{hop.location}</span>
                              </div>
                         )}
                     </div>

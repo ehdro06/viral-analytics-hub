@@ -9,6 +9,8 @@ a bottleneck for these choices, not a promise of how far the design scales.
 
 ## Results so far
 
+Reports and raw numbers for every run: [`loadtest/results/`](../loadtest/results/).
+
 ### Local baseline (Nov 2026)
 
 Redirect + analytics with the prod profile on one 4-CPU container, local Postgres 16 and Redis 7, k6 on the same
@@ -86,6 +88,7 @@ Bring the reports back and delete the VM:
 exit                                                     # leave the VM
 gcloud compute scp 'k6-runner:~/report-*.html' . --zone=us-west1-b
 cloudshell download report-200.html                      # once per file; opens a browser download
+# Keep them: add each run to loadtest/results/YYYY-MM-DD-prod/ (report.html + a README with the numbers)
 gcloud compute instances delete k6-runner --zone=us-west1-b --quiet
 ```
 

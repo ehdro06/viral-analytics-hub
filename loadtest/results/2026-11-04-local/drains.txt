@@ -1,0 +1,6 @@
+02:52:19 xlen_before=7606 drain={"processed":8342}
+02:53:22 xlen_before=24627 drain={"processed":10000}
+02:54:26 xlen_before=55663 drain={"processed":10000}
+02:55:28 xlen_before=45663 drain={"processed":10000}
+02:56:30 xlen_before=35663 drain={"processed":10000}
+02:57:32 xlen_before=25663 drain={"processed":10000}

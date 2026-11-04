@@ -14,6 +14,9 @@ import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
+import java.time.Duration;
+
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -41,7 +44,7 @@ class SpongeTriggerControllerTest {
 
         @Test
         void correctToken_DrainsAndReportsCount() throws Exception {
-            when(spongeService.spongeEvents()).thenReturn(7);
+            when(spongeService.drainUntilEmpty(Duration.ofSeconds(50))).thenReturn(7);
 
             mockMvc.perform(post("/internal/sponge/drain").header("X-Sponge-Token", "s3cret-token"))
                     .andExpect(status().isOk())
@@ -52,14 +55,14 @@ class SpongeTriggerControllerTest {
         void wrongToken_Returns403WithoutDraining() throws Exception {
             mockMvc.perform(post("/internal/sponge/drain").header("X-Sponge-Token", "guess"))
                     .andExpect(status().isForbidden());
-            verify(spongeService, never()).spongeEvents();
+            verify(spongeService, never()).drainUntilEmpty(any());
         }
 
         @Test
         void missingToken_Returns403WithoutDraining() throws Exception {
             mockMvc.perform(post("/internal/sponge/drain"))
                     .andExpect(status().isForbidden());
-            verify(spongeService, never()).spongeEvents();
+            verify(spongeService, never()).drainUntilEmpty(any());
         }
     }
 
@@ -82,7 +85,7 @@ class SpongeTriggerControllerTest {
         void endpointIsDisabled() throws Exception {
             mockMvc.perform(post("/internal/sponge/drain").header("X-Sponge-Token", ""))
                     .andExpect(status().isNotFound());
-            verify(spongeService, never()).spongeEvents();
+            verify(spongeService, never()).drainUntilEmpty(any());
         }
     }
 }

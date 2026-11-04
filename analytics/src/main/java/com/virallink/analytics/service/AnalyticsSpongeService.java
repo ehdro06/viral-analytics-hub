@@ -17,6 +17,7 @@ import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 
 import java.net.URI;
+import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
@@ -33,7 +34,9 @@ import java.util.concurrent.locks.ReentrantLock;
  * production: Cloud Scheduler once a minute, so the service can scale to zero between calls).
  *
  * <ul>
- *   <li>Each tick drains the stream in batches of {@value #BATCH_SIZE} (bounded per tick), one JDBC batch per read.</li>
+ *   <li>Events are read in batches of {@value #BATCH_SIZE}, one JDBC batch per read. A polling tick stops after
+ *       {@value #MAX_BATCHES_PER_TICK} batches (the next tick is 500 ms away); an on-demand drain keeps going until the
+ *       stream is empty or its time budget runs out, so a once-a-minute call can keep up with bursts.</li>
  *   <li>Events are acknowledged (and removed from the stream) only after the batch is committed, so a DB outage
  *       or crash never loses clicks. They stay pending and are retried on the next tick (at-least-once delivery).</li>
  *   <li>A malformed event is logged and dropped: one bad event must never block the queue forever.</li>
@@ -70,14 +73,26 @@ public class AnalyticsSpongeService {
         ensureConsumerGroup();
     }
 
-    /** Drains the stream once. Returns the number of events processed (0 if another drain is already running). */
+    /** One polling tick: at most {@value #MAX_BATCHES_PER_TICK} batches. Returns the events processed (0 if busy). */
     public int spongeEvents() {
+        return run(MAX_BATCHES_PER_TICK, null);
+    }
+
+    /**
+     * On-demand drain: keeps reading until the stream is empty or {@code budget} has passed (a batch already started
+     * still finishes). Returns the events processed (0 if another drain is already running).
+     */
+    public int drainUntilEmpty(Duration budget) {
+        return run(Integer.MAX_VALUE, Instant.now().plus(budget));
+    }
+
+    private int run(int maxBatches, Instant deadline) {
         if (!drainLock.tryLock()) return 0;
         int processed = 0;
         try {
             lastRunTime = Instant.now();
-            processed += drain(ReadOffset.from("0"));        // 1. our own unacknowledged events (crash / DB outage recovery)
-            processed += drain(ReadOffset.lastConsumed());   // 2. new events
+            processed += drain(ReadOffset.from("0"), maxBatches, deadline);      // 1. our own unacknowledged events (crash / DB outage recovery)
+            processed += drain(ReadOffset.lastConsumed(), maxBatches, deadline); // 2. new events
         } catch (Exception e) {
             if (isMissingGroup(e)) {
                 log.warn("Consumer group vanished (Redis flushed?). Recreating.");
@@ -91,9 +106,9 @@ public class AnalyticsSpongeService {
         return processed;
     }
 
-    private int drain(ReadOffset offset) {
+    private int drain(ReadOffset offset, int maxBatches, Instant deadline) {
         int processed = 0;
-        for (int i = 0; i < MAX_BATCHES_PER_TICK; i++) {
+        for (int i = 0; i < maxBatches && (deadline == null || Instant.now().isBefore(deadline)); i++) {
             List<MapRecord<String, Object, Object>> records = redisTemplate.opsForStream().read(
                     Consumer.from(CONSUMER_GROUP, CONSUMER_NAME),
                     StreamReadOptions.empty().count(BATCH_SIZE),

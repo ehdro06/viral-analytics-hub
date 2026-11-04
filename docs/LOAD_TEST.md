@@ -24,12 +24,15 @@ machine (so the services and k6 share CPUs). 10 links, ramp 100 -> 250 -> 500 ->
 What this shows: the code itself is not the limit at 1,000 req/s; the redirect answers from the Redis cache in about a
 millisecond and hands the click to the queue.
 
-**Finding: the drain is capped at 10,000 clicks per call.** Each `POST /internal/sponge/drain` processes at most 20
-batches of 500. With Cloud Scheduler calling once a minute, production can absorb on average **~167 clicks/s**; above
-that the backlog grows (here: 55,663 waiting at the peak, cleared in 7 minutes). One drain of 10,000 took ~2 s
-locally, so the cap is not a performance limit, just a setting. Risk: if the backlog ever passes the stream cap
-(500,000), Redis trims the oldest events and those clicks are lost. Fix: keep draining until the stream is empty or a
-time budget (well under the scheduler's 120 s deadline) runs out.
+**Finding (fixed): the drain was capped at 10,000 clicks per call.** Each `POST /internal/sponge/drain` processed at
+most 20 batches of 500, so with Cloud Scheduler calling once a minute production could absorb on average only
+**~167 clicks/s**. In the first run the backlog reached 55,663 and took 7 minutes to clear; a backlog above the stream
+cap (500,000) would have lost the oldest clicks. One batch of 10,000 took ~2 s, so the cap was a setting, not a limit.
+
+Fix: an on-demand drain now keeps going until the stream is empty or its time budget runs out
+(`SPONGE_DRAIN_BUDGET_SECONDS`, default 50, well under the scheduler's 120 s deadline). The 500 ms local polling
+tick keeps its 20-batch bound. Same test again: **one drain call stored all 74,004 clicks in 19.4 s** (~3,800/s
+locally; expect less on Cloud Run + Neon).
 
 ### Production
 
@@ -99,8 +102,7 @@ gcloud compute instances delete k6-runner --zone=us-west1-b --quiet
   - Compute Engine -> `virallink-redis` -> Observability: CPU. A tiny shared-core VM pinned at 100 % means Redis is
     the bottleneck.
   - Neon dashboard: connections and CPU (only cache misses reach Postgres).
-- **No lost clicks:** wait until the backlog is drained (at most 10,000 clicks per minute today, see the finding
-  above), then the dashboard's click total should have grown by exactly `clicks_sent`.
+- **No lost clicks:** wait for the next drain (the backlog is cleared in one call if it fits in the time budget), then the dashboard's click total should have grown by exactly `clicks_sent`.
 
 ## What to write down
 

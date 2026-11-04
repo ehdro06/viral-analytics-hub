@@ -116,6 +116,7 @@ the value). Plain values go in `--set-env-vars`. `PORT` is set by Cloud Run; nev
 | `SPONGE_TRIGGER_TOKEN` | ✓ `sponge-trigger-token` | | | ✓ | shared with the Cloud Scheduler job; without it the drain endpoint is off |
 | `SPONGE_MODE` | | | | (✓) | `on-demand` in the prod profile, `poll` locally |
 | `ANALYTICS_RETENTION_MONTHS` | | | | (✓) | Months click records are kept (default `12`, `0` = keep forever); must match the Privacy Policy |
+| `SPONGE_DRAIN_BUDGET_SECONDS` | | | | (✓) | Seconds one drain call may run before leaving the rest for the next call (default `50`; keep under the scheduler's 120 s deadline) |
 
 Instead of the four `REDIS_*` values you can set one secret `SPRING_DATA_REDIS_URL` (`redis://:<password>@<host>:6379`).
 

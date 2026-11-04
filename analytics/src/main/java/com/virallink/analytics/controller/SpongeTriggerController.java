@@ -10,6 +10,7 @@ import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.nio.charset.StandardCharsets;
+import java.time.Duration;
 import java.security.MessageDigest;
 import java.util.Map;
 
@@ -28,12 +29,15 @@ public class SpongeTriggerController {
     private final AnalyticsSpongeService spongeService;
     private final RetentionService retentionService;
     private final byte[] triggerToken;
+    private final Duration drainBudget;
 
     public SpongeTriggerController(AnalyticsSpongeService spongeService, RetentionService retentionService,
-                                   @Value("${analytics.sponge.trigger-token:}") String triggerToken) {
+                                   @Value("${analytics.sponge.trigger-token:}") String triggerToken,
+                                   @Value("${analytics.sponge.drain-budget-seconds:50}") long drainBudgetSeconds) {
         this.spongeService = spongeService;
         this.retentionService = retentionService;
         this.triggerToken = triggerToken.getBytes(StandardCharsets.UTF_8);
+        this.drainBudget = Duration.ofSeconds(drainBudgetSeconds);
     }
 
     @PostMapping("/internal/sponge/drain")
@@ -44,7 +48,7 @@ public class SpongeTriggerController {
         if (token == null || !MessageDigest.isEqual(triggerToken, token.getBytes(StandardCharsets.UTF_8))) {
             return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
         }
-        int processed = spongeService.spongeEvents();
+        int processed = spongeService.drainUntilEmpty(drainBudget);
         retentionService.purgeIfDue(); // at most once a day
         return ResponseEntity.ok(Map.of("processed", processed));
     }

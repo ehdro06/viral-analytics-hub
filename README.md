@@ -81,6 +81,8 @@ Production deploy (Vercel, Cloud Run, Neon, Redis): **[docs/DEPLOY.md](docs/DEPL
 
 How the code works, journey by journey: **[docs/HOW_IT_WORKS.md](docs/HOW_IT_WORKS.md)**.
 
+Load testing (k6) and results: **[docs/LOAD_TEST.md](docs/LOAD_TEST.md)**.
+
 ## Repository layout
 
 ```

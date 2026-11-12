@@ -7,12 +7,16 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.oauth2.client.authentication.OAuth2AuthenticationToken;
 import org.springframework.security.oauth2.core.user.OAuth2User;
 import org.springframework.security.web.authentication.logout.SecurityContextLogoutHandler;
 import org.springframework.web.bind.annotation.*;
 
+import java.time.LocalDateTime;
+import java.util.Comparator;
+import java.util.List;
 import java.util.Map;
 
 @RestController
@@ -46,27 +50,60 @@ public class UserController {
      * links (redirect) and click data (analytics), which live in other services' databases.
      */
     @DeleteMapping("/me")
-    public ResponseEntity<Void> deleteCurrentUser(@AuthenticationPrincipal OAuth2User principal,
-                                                  OAuth2AuthenticationToken token,
+    public ResponseEntity<Void> deleteCurrentUser(Authentication authentication,
                                                   HttpServletRequest request, HttpServletResponse response) {
-        if (principal == null) {
+        User user = currentUser(authentication);
+        if (user == null) {
             return ResponseEntity.status(401).build();
         }
-        userService.deleteAccount(resolveUser(token, principal));
-        new SecurityContextLogoutHandler().logout(request, response, token);
+        userService.deleteAccount(user);
+        new SecurityContextLogoutHandler().logout(request, response, authentication); // also ends the login session
         return ResponseEntity.noContent().build();
     }
 
+    /** Only what the Settings page lists: the key's public prefix and when it was made. Never the hash. */
+    public record ApiKeyItem(Long id, String prefix, LocalDateTime createdAt) {}
+
+    @GetMapping("/keys")
+    public ResponseEntity<List<ApiKeyItem>> listApiKeys(Authentication authentication) {
+        User user = currentUser(authentication);
+        if (user == null) {
+            return ResponseEntity.status(401).build();
+        }
+        List<ApiKeyItem> keys = userService.getApiKeys(user).stream()
+                .sorted(Comparator.comparing(k -> k.getCreatedAt(), Comparator.nullsLast(Comparator.reverseOrder())))
+                .map(k -> new ApiKeyItem(k.getId(), k.getPrefix(), k.getCreatedAt()))
+                .toList();
+        return ResponseEntity.ok(keys);
+    }
+
     @PostMapping("/keys")
-    public ResponseEntity<Map<String, String>> generateApiKey(@AuthenticationPrincipal OAuth2User principal,
-                                                              OAuth2AuthenticationToken token) {
-        User user = resolveUser(token, principal);
+    public ResponseEntity<Map<String, String>> generateApiKey(Authentication authentication) {
+        User user = currentUser(authentication);
+        if (user == null) {
+            return ResponseEntity.status(401).build();
+        }
         String rawKey = userService.createApiKey(user);
-        
+
         return ResponseEntity.ok(Map.of(
             "key", rawKey,
             "message", "Store this key safely. You won't be able to see it again."
         ));
+    }
+
+    /**
+     * The signed-in user, however the request proved it. The browser sends both the login session cookie and the API
+     * token (authFetch adds {@code Authorization: Bearer} to every call); when the token is present the JWT filter
+     * replaces the session's OAuth2 identity with the token's user id, so both shapes must be understood here.
+     */
+    private User currentUser(Authentication authentication) {
+        if (authentication instanceof OAuth2AuthenticationToken oauth) {
+            return resolveUser(oauth, oauth.getPrincipal());
+        }
+        if (authentication != null && authentication.getPrincipal() instanceof Long userId) {
+            return userService.getUserById(userId);
+        }
+        return null;
     }
 
     private User resolveUser(OAuth2AuthenticationToken token, OAuth2User principal) {

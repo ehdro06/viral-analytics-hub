@@ -1,82 +1,76 @@
 import { useMemo } from "react";
-import {
-  AreaChart,
-  Area,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  ResponsiveContainer,
-} from "recharts";
+import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis, type TooltipProps } from "recharts";
 import { TimeSeriesPoint } from "@/lib/types";
 import { EmptyChart } from "@/components/DataState";
-import { formatHourLabel } from "@/lib/format";
 
 interface TimeSeriesChartProps {
   data: TimeSeriesPoint[];
+  /** Pixel height of the plot area. */
+  height?: number;
 }
 
-export default function TimeSeriesChart({ data }: TimeSeriesChartProps) {
-  const formatted = useMemo(
-    () =>
-      data.map((d) => ({
-        ...d,
-        label: formatHourLabel(d.timestamp),
-      })),
-    [data]
+const LOCALE = "en-US"; // UI is English-only; times are in the viewer's own time zone
+const hourTick = (ms: number) => new Date(ms).toLocaleTimeString(LOCALE, { hour: "numeric" });
+const hourRange = (ms: number) => {
+  const from = new Date(ms);
+  const to = new Date(ms + 3_600_000);
+  const day = from.toLocaleDateString(LOCALE, { weekday: "short", month: "short", day: "numeric" });
+  const t = (d: Date) => d.toLocaleTimeString(LOCALE, { hour: "numeric", minute: "2-digit" });
+  return `${day}, ${t(from)}–${t(to)}`;
+};
+
+function ChartTooltip({ active, payload }: TooltipProps<number, string>) {
+  if (!active || !payload?.length) return null;
+  const point = payload[0].payload as { t: number; clicks: number };
+  return (
+    <div className="rounded-md bg-surface px-3 py-2 text-meta shadow-md dark:border dark:shadow-none">
+      <p className="text-muted-foreground">{hourRange(point.t)}</p>
+      <p className="mt-0.5 font-medium tabular-nums text-foreground">
+        {point.clicks.toLocaleString(LOCALE)} {point.clicks === 1 ? "click" : "clicks"}
+      </p>
+    </div>
   );
+}
+
+/**
+ * Hourly clicks, one series. Colours come from CSS tokens (see .chart rules in globals.css), so light and dark both
+ * work. No animation: the data refreshes every 10 seconds and redrawing would only distract.
+ */
+export default function TimeSeriesChart({ data, height = 240 }: TimeSeriesChartProps) {
+  const points = useMemo(() => data.map((d) => ({ t: new Date(d.timestamp).getTime(), clicks: d.clicks })), [data]);
+
+  if (data.every((d) => d.clicks === 0)) return <EmptyChart />;
 
   return (
-    <div className="rounded-xl border border-border bg-card p-5">
-      <div className="flex items-center justify-between mb-4">
-        <h3 className="text-sm font-semibold text-foreground">Clicks Over Time</h3>
-        <span className="text-xs text-muted-foreground">Last 48 hours</span>
-      </div>
-      {data.every((d) => d.clicks === 0) ? (
-        <EmptyChart />
-      ) : (
-      <div className="h-64">
-        <ResponsiveContainer width="100%" height="100%">
-          <AreaChart data={formatted} margin={{ top: 4, right: 4, left: -20, bottom: 0 }}>
-            <defs>
-              <linearGradient id="clickGradient" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stopColor="hsl(174, 72%, 52%)" stopOpacity={0.3} />
-                <stop offset="100%" stopColor="hsl(174, 72%, 52%)" stopOpacity={0} />
-              </linearGradient>
-            </defs>
-            <CartesianGrid strokeDasharray="3 3" stroke="hsl(222, 20%, 16%)" />
-            <XAxis
-              dataKey="label"
-              tick={{ fill: "hsl(215, 20%, 55%)", fontSize: 11 }}
-              tickLine={false}
-              axisLine={false}
-              interval="preserveStartEnd"
-            />
-            <YAxis
-              tick={{ fill: "hsl(215, 20%, 55%)", fontSize: 11 }}
-              tickLine={false}
-              axisLine={false}
-            />
-            <Tooltip
-              contentStyle={{
-                backgroundColor: "hsl(222, 44%, 10%)",
-                border: "1px solid hsl(222, 20%, 16%)",
-                borderRadius: "8px",
-                color: "hsl(210, 40%, 96%)",
-                fontSize: 12,
-              }}
-            />
-            <Area
-              type="monotone"
-              dataKey="clicks"
-              stroke="hsl(174, 72%, 52%)"
-              strokeWidth={2}
-              fill="url(#clickGradient)"
-            />
-          </AreaChart>
-        </ResponsiveContainer>
-      </div>
-      )}
+    <div className="chart text-primary" style={{ height }}>
+      <ResponsiveContainer width="100%" height="100%">
+        <AreaChart data={points} margin={{ top: 8, right: 4, left: 0, bottom: 0 }}>
+          <CartesianGrid vertical={false} />
+          <XAxis
+            dataKey="t"
+            type="number"
+            scale="time"
+            domain={["dataMin", "dataMax"]}
+            tickFormatter={hourTick}
+            tickLine={false}
+            axisLine={false}
+            minTickGap={32}
+            tickMargin={8}
+          />
+          <YAxis tickLine={false} axisLine={false} width={40} allowDecimals={false} tickMargin={4} />
+          <Tooltip content={<ChartTooltip />} cursor={{ stroke: "currentColor", strokeOpacity: 0.3 }} isAnimationActive={false} />
+          <Area
+            type="monotone"
+            dataKey="clicks"
+            stroke="currentColor"
+            strokeWidth={2}
+            fill="currentColor"
+            fillOpacity={0.08}
+            isAnimationActive={false}
+            activeDot={{ r: 4, strokeWidth: 0, fill: "currentColor" }}
+          />
+        </AreaChart>
+      </ResponsiveContainer>
     </div>
   );
 }

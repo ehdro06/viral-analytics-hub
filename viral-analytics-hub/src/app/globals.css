@@ -127,3 +127,15 @@
     transform: none;
   }
 }
+
+/* Recharts: colours from tokens so both themes work without JS */
+@layer components {
+  .chart .recharts-cartesian-grid line {
+    stroke: oklch(var(--chart-grid));
+  }
+  .chart .recharts-cartesian-axis-tick-value {
+    fill: oklch(var(--muted-foreground));
+    font-size: 12px;
+    font-variant-numeric: tabular-nums;
+  }
+}

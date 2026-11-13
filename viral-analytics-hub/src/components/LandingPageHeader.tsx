@@ -10,7 +10,7 @@ export function LandingPageHeader() {
 
   return (
     <header className="border-b">
-      <div className="mx-auto flex h-14 max-w-5xl items-center justify-between px-4 sm:px-6">
+      <div className="mx-auto flex h-14 max-w-6xl items-center justify-between px-4 sm:px-6">
         <Wordmark />
         <nav aria-label="Account" className="flex items-center gap-2">
           {!isLoading && user ? (

@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import DashboardLayout from "@/components/DashboardLayout";
+import PageHeader from "@/components/PageHeader";
 import LinksTable from "@/components/LinksTable";
 import LinkCreationDialog from "@/components/LinkCreationDialog";
 import LinkExpiryDialog from "@/components/LinkExpiryDialog";
@@ -64,25 +65,27 @@ export default function LinksPage() {
 
   return (
     <DashboardLayout>
-      <div className="p-4 lg:p-8 max-w-6xl mx-auto space-y-6">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div>
-            <h1 className="text-2xl font-bold text-foreground tracking-tight">Links</h1>
-            <p className="text-sm text-muted-foreground mt-1">Manage your shortened URLs</p>
-          </div>
-          <Button onClick={() => setDialogOpen(true)} className="shrink-0">
-            <Plus className="w-4 h-4 mr-2" />
-            Create Link
-          </Button>
-        </div>
+      <div className="mx-auto max-w-6xl space-y-6 px-4 py-6 lg:px-8 lg:py-8">
+        <PageHeader
+          title="Links"
+          description="Create, pause and expire short links. Click counts update every 10 seconds."
+          actions={
+            <Button onClick={() => setDialogOpen(true)}>
+              <Plus />
+              Create link
+            </Button>
+          }
+        />
 
         <div className="relative max-w-sm">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+          <Search aria-hidden className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
+            type="search"
+            aria-label="Search links by code or destination"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search links..."
-            className="pl-9 bg-secondary border-border"
+            placeholder="Search by code or destination"
+            className="pl-9"
           />
         </div>
 
@@ -96,11 +99,7 @@ export default function LinksPage() {
 
         <LinkExpiryDialog link={expiryLink} onClose={() => setExpiryLink(null)} onSave={handleSaveExpiry} />
 
-        <LinkCreationDialog
-          open={dialogOpen}
-          onClose={() => setDialogOpen(false)}
-          onCreate={handleCreate}
-        />
+        <LinkCreationDialog open={dialogOpen} onClose={() => setDialogOpen(false)} onCreate={handleCreate} />
       </div>
     </DashboardLayout>
   );

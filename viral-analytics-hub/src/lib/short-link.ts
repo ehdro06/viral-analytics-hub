@@ -15,3 +15,12 @@ export function shortLinkLabel(code: string): string {
     return `${BASE}/${code}`;
   }
 }
+
+/** Host part of short links ("redirect-…run.app"), shown once above the table instead of on every row. */
+export function shortLinkHost(): string {
+  try {
+    return new URL(BASE).host;
+  } catch {
+    return BASE;
+  }
+}

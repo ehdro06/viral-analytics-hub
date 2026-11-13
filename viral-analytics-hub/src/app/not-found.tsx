@@ -1,25 +1,24 @@
-"use client";
-
-import { usePathname } from "next/navigation";
-import { useEffect } from "react";
 import Link from "next/link";
+import { Button } from "@/components/ui/button";
 
 export default function NotFound() {
-  const pathname = usePathname();
-
-  useEffect(() => {
-    console.error("404 Error: User attempted to access non-existent route:", pathname);
-  }, [pathname]);
-
   return (
-    <div className="flex min-h-screen items-center justify-center bg-muted">
-      <div className="text-center">
-        <h1 className="mb-4 text-4xl font-bold">404</h1>
-        <p className="mb-4 text-xl text-muted-foreground">Oops! Page not found</p>
-        <Link href="/" className="text-primary underline hover:text-primary/90">
-          Return to Home
-        </Link>
+    <main className="flex min-h-screen items-center justify-center bg-background px-4">
+      <div className="max-w-sm">
+        <p className="text-meta text-muted-foreground">Error 404</p>
+        <h1 className="mt-1 text-page-title text-foreground">This page doesn&apos;t exist</h1>
+        <p className="mt-2 text-sm text-muted-foreground">
+          The address may be mistyped, or the page was moved. If you followed a short link, it may have been deleted.
+        </p>
+        <div className="mt-6 flex gap-2">
+          <Button asChild>
+            <Link href="/">Go to the home page</Link>
+          </Button>
+          <Button asChild variant="outline">
+            <Link href="/dashboard">Open dashboard</Link>
+          </Button>
+        </div>
       </div>
-    </div>
+    </main>
   );
 }

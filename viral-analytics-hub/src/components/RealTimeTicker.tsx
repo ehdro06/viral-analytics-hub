@@ -1,62 +1,39 @@
-import { motion, AnimatePresence } from "framer-motion";
-import { Zap } from "lucide-react";
-
 interface RealTimeTickerProps {
   clicksLastMinute: number;
+  peakClicksPerMinute: number;
 }
 
 const VIRAL_THRESHOLD = 300; // clicks per minute
 
-export default function RealTimeTicker({ clicksLastMinute }: RealTimeTickerProps) {
+/**
+ * The number people come to the dashboard for. Static "Live" marker (the data refreshes every 10 seconds;
+ * nothing pulses or counts up), plus one line of context against today's peak.
+ */
+export default function RealTimeTicker({ clicksLastMinute, peakClicksPerMinute }: RealTimeTickerProps) {
   const isViral = clicksLastMinute > VIRAL_THRESHOLD;
 
   return (
-    <div
-      className={`rounded-xl border p-5 transition-all duration-500 ${
-        isViral
-          ? "bg-card border-viral/30 glow-viral"
-          : "bg-card border-border"
-      }`}
-    >
-      <div className="flex items-center justify-between mb-2">
-        <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
-          Last minute
+    <div>
+      <p className="flex items-center gap-2 text-sm text-muted-foreground">
+        Clicks in the last minute
+        <span className="inline-flex items-center gap-1.5 text-meta text-foreground">
+          <span aria-hidden className="h-1.5 w-1.5 rounded-full bg-status-live" />
+          Live
         </span>
-        <div className="flex items-center gap-1.5">
-          <div
-            className={`w-2 h-2 rounded-full ${
-              isViral ? "bg-viral animate-pulse-glow" : "bg-success animate-pulse"
-            }`}
-          />
-          <span className="text-xs text-muted-foreground">LIVE</span>
-        </div>
-      </div>
-      <div className="flex items-center gap-3">
-        <AnimatePresence mode="popLayout">
-          <motion.span
-            key={clicksLastMinute}
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -10 }}
-            className={`text-4xl font-bold font-mono tracking-tighter ${
-              isViral ? "text-gradient-viral" : "text-foreground"
-            }`}
-          >
-            {clicksLastMinute.toLocaleString()}
-          </motion.span>
-        </AnimatePresence>
-        {isViral && (
-          <motion.div
-            initial={{ scale: 0 }}
-            animate={{ scale: 1 }}
-            className="flex items-center gap-1 px-2 py-1 rounded-full bg-viral/15 text-viral"
-          >
-            <Zap className="w-3 h-3" />
-            <span className="text-xs font-bold">VIRAL</span>
-          </motion.div>
+      </p>
+      <p className="mt-2 text-metric-xl tabular-nums text-foreground" aria-live="polite">
+        {clicksLastMinute.toLocaleString("en-US")}
+      </p>
+      <p className="mt-2 text-meta text-muted-foreground">
+        {isViral ? (
+          <span className="font-medium text-foreground">Over {VIRAL_THRESHOLD} a minute: this link is going viral.</span>
+        ) : (
+          <>
+            Peak in the last 24 hours:{" "}
+            <span className="tabular-nums text-foreground">{peakClicksPerMinute.toLocaleString("en-US")}</span> a minute
+          </>
         )}
-      </div>
-      <p className="text-xs text-muted-foreground mt-1">clicks in the last 60 seconds</p>
+      </p>
     </div>
   );
 }

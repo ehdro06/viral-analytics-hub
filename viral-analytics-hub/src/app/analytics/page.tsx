@@ -1,6 +1,7 @@
 "use client";
 
 import DashboardLayout from "@/components/DashboardLayout";
+import PageHeader from "@/components/PageHeader";
 import TimeSeriesChart from "@/components/TimeSeriesChart";
 import ReferrerBreakdown from "@/components/ReferrerBreakdown";
 import GeoBreakdown from "@/components/GeoBreakdown";
@@ -12,13 +13,8 @@ export default function AnalyticsPage() {
 
   return (
     <DashboardLayout>
-      <div className="p-4 lg:p-8 max-w-7xl mx-auto space-y-6">
-        <div>
-          <h1 className="text-2xl font-bold text-foreground tracking-tight">Analytics</h1>
-          <p className="text-sm text-muted-foreground mt-1">
-            Deep dive into your link performance
-          </p>
-        </div>
+      <div className="mx-auto max-w-6xl space-y-8 px-4 py-6 lg:px-8 lg:py-8">
+        <PageHeader title="Analytics" description="Where your clicks come from, across all links." />
 
         {isError && (
           <ErrorState
@@ -31,8 +27,19 @@ export default function AnalyticsPage() {
 
         {data && (
           <>
-            <TimeSeriesChart data={data.timeSeries} />
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            <section aria-labelledby="hourly-title" className="rounded-lg border bg-surface p-5">
+              <div className="flex items-baseline justify-between gap-4">
+                <h2 id="hourly-title" className="text-section-title text-foreground">
+                  Clicks per hour
+                </h2>
+                <p className="text-meta text-muted-foreground">Last 48 hours, your time zone</p>
+              </div>
+              <div className="mt-4">
+                <TimeSeriesChart data={data.timeSeries} height={300} />
+              </div>
+            </section>
+
+            <div className="grid grid-cols-1 gap-10 lg:grid-cols-2">
               <ReferrerBreakdown data={data.referrers} />
               <GeoBreakdown data={data.geoData} />
             </div>

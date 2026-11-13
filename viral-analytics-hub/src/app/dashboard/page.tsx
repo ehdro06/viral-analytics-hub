@@ -1,12 +1,7 @@
 "use client";
 
-import {
-  MousePointerClick,
-  Users,
-  TrendingUp,
-  Flame,
-} from "lucide-react";
 import DashboardLayout from "@/components/DashboardLayout";
+import PageHeader from "@/components/PageHeader";
 import StatsCard from "@/components/StatsCard";
 import RealTimeTicker from "@/components/RealTimeTicker";
 import TimeSeriesChart from "@/components/TimeSeriesChart";
@@ -20,13 +15,8 @@ export default function DashboardPage() {
 
   return (
     <DashboardLayout>
-      <div className="p-4 lg:p-8 max-w-7xl mx-auto space-y-6">
-        <div>
-          <h1 className="text-2xl font-bold text-foreground tracking-tight">Dashboard</h1>
-          <p className="text-sm text-muted-foreground mt-1">
-            Live analytics across all your links
-          </p>
-        </div>
+      <div className="mx-auto max-w-6xl space-y-8 px-4 py-6 lg:px-8 lg:py-8">
+        <PageHeader title="Dashboard" description="Clicks across all your links, updated every 10 seconds." />
 
         {isError && (
           <ErrorState
@@ -39,45 +29,30 @@ export default function DashboardPage() {
 
         {data && (
           <>
-            {/* Stats Grid */}
-            <div className="grid grid-cols-2 lg:grid-cols-5 gap-3 lg:gap-4">
-              <div className="col-span-2 lg:col-span-1">
-                <RealTimeTicker clicksLastMinute={data.clicksLastMinute} />
+            {/* Lead: what is happening right now, and the last two days */}
+            <section
+              aria-label="Live clicks"
+              className="grid gap-6 rounded-lg border bg-surface p-5 lg:grid-cols-[minmax(200px,240px)_1fr] lg:gap-8"
+            >
+              <RealTimeTicker clicksLastMinute={data.clicksLastMinute} peakClicksPerMinute={data.peakClicksPerMinute} />
+              <div className="min-w-0">
+                <h2 className="text-sm text-muted-foreground">Clicks per hour, last 48 hours</h2>
+                <div className="mt-3">
+                  <TimeSeriesChart data={data.timeSeries} height={220} />
+                </div>
               </div>
-              <StatsCard
-                label="Total Clicks"
-                value={data.totalClicks}
-                icon={MousePointerClick}
-                variant="primary"
-                delay={0.05}
-              />
-              <StatsCard
-                label="Last 24h"
-                value={data.clicksLast24h}
-                icon={TrendingUp}
-                delay={0.1}
-              />
-              <StatsCard
-                label="Unique Visitors (7d)"
-                value={data.uniqueVisitors}
-                icon={Users}
-                delay={0.15}
-              />
-              <StatsCard
-                label="Peak / min (24h)"
-                value={data.peakClicksPerMinute}
-                icon={Flame}
-                variant="viral"
-                delay={0.2}
-              />
-            </div>
+            </section>
 
-            {/* Charts */}
-            <TimeSeriesChart data={data.timeSeries} />
+            <dl className="grid grid-cols-2 gap-x-6 gap-y-5 border-y py-5 lg:grid-cols-4">
+              <StatsCard label="Total clicks" value={data.totalClicks} />
+              <StatsCard label="Last 24 hours" value={data.clicksLast24h} />
+              <StatsCard label="Unique visitors, 7 days" value={data.uniqueVisitors} />
+              <StatsCard label="Average per day, 30 days" value={data.avgClicksPerDay} />
+            </dl>
 
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-              <ReferrerBreakdown data={data.referrers} />
-              <GeoBreakdown data={data.geoData} />
+            <div className="grid grid-cols-1 gap-10 lg:grid-cols-2">
+              <ReferrerBreakdown data={data.referrers} limit={5} moreHref="/analytics" />
+              <GeoBreakdown data={data.geoData} limit={5} moreHref="/analytics" />
             </div>
           </>
         )}

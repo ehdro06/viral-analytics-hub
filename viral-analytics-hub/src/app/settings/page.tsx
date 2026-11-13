@@ -2,7 +2,7 @@
 
 import DashboardLayout from "@/components/DashboardLayout";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import PageHeader from "@/components/PageHeader";
 import {
   Dialog,
   DialogContent,
@@ -14,12 +14,64 @@ import {
 import { useApiKeys } from "@/hooks/use-api-keys";
 import { useDeleteAccount } from "@/hooks/use-delete-account";
 import { useUser } from "@/hooks/use-user";
-import { Copy, KeyRound, Loader2, LogOut, Plus, Trash2 } from "lucide-react";
+import { Copy, Loader2, LogOut, Plus, Trash2 } from "lucide-react";
+import { useTheme } from "next-themes";
 import Link from "next/link";
 import { Input } from "@/components/ui/input";
-import { useState } from "react";
+import { useState, useSyncExternalStore, type ReactNode } from "react";
 import { toast } from "sonner";
 import { formatDate } from "@/lib/format";
+
+function Section({ title, description, children }: { title: string; description: ReactNode; children: ReactNode }) {
+  return (
+    <section className="grid gap-4 py-6 md:grid-cols-[minmax(0,1fr)_minmax(0,1.6fr)] md:gap-10" aria-labelledby={`s-${title}`}>
+      <div>
+        <h2 id={`s-${title}`} className="text-section-title text-foreground">
+          {title}
+        </h2>
+        <p className="mt-1 text-sm text-muted-foreground">{description}</p>
+      </div>
+      <div className="min-w-0">{children}</div>
+    </section>
+  );
+}
+
+const THEMES = [
+  { value: "system", label: "System" },
+  { value: "light", label: "Light" },
+  { value: "dark", label: "Dark" },
+] as const;
+
+/** Segmented control. Rendered after mount: the stored theme is only known in the browser. */
+function ThemeChoice() {
+  const { theme, setTheme } = useTheme();
+  const mounted = useSyncExternalStore(
+    () => () => {},
+    () => true,
+    () => false,
+  );
+  return (
+    <div role="radiogroup" aria-label="Colour theme" className="inline-flex rounded-md border p-0.5">
+      {THEMES.map((t) => {
+        const selected = mounted && (theme ?? "system") === t.value;
+        return (
+          <button
+            key={t.value}
+            type="button"
+            role="radio"
+            aria-checked={selected}
+            onClick={() => setTheme(t.value)}
+            className={`pressable rounded px-3 py-1.5 text-sm ${
+              selected ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            {t.label}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
 
 export default function SettingsPage() {
   const { user, logout } = useUser();
@@ -47,94 +99,80 @@ export default function SettingsPage() {
 
   return (
     <DashboardLayout>
-      <div className="p-6 lg:p-8 max-w-3xl mx-auto space-y-8">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">Settings</h1>
-          <p className="text-muted-foreground mt-1">
-            Profile and API keys for scripts and integrations.
-          </p>
-        </div>
+      <div className="mx-auto max-w-4xl space-y-8 px-4 py-6 lg:px-8 lg:py-8">
+        <PageHeader title="Settings" description="Your profile, appearance, API keys and account." />
 
-        <Card>
-          <CardHeader>
-            <CardTitle>Profile</CardTitle>
-            <CardDescription>Signed in via OAuth</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-2 text-sm">
-            <p>
-              <span className="text-muted-foreground">Name:</span>{" "}
-              <span className="font-medium">{user?.name}</span>
-            </p>
-            <p>
-              <span className="text-muted-foreground">Email:</span>{" "}
-              <span className="font-medium">{user?.email}</span>
-            </p>
-            <Button variant="outline" size="sm" className="mt-4 gap-2" onClick={logout}>
-              <LogOut className="h-4 w-4" />
+        <div className="divide-y border-y">
+          <Section title="Profile" description="From your Google or GitHub sign-in.">
+            <dl className="grid grid-cols-[auto_1fr] gap-x-6 gap-y-2 text-sm">
+              <dt className="text-muted-foreground">Name</dt>
+              <dd className="text-foreground">{user?.name}</dd>
+              <dt className="text-muted-foreground">Email</dt>
+              <dd className="break-all text-foreground">{user?.email}</dd>
+            </dl>
+            <Button variant="outline" size="sm" className="mt-4" onClick={logout}>
+              <LogOut />
               Sign out
             </Button>
-          </CardContent>
-        </Card>
+          </Section>
 
-        <Card>
-          <CardHeader className="flex flex-row items-start justify-between gap-4">
-            <div>
-              <CardTitle className="flex items-center gap-2">
-                <KeyRound className="h-5 w-5" />
-                API keys
-              </CardTitle>
-              <CardDescription>
-                Use <code className="text-xs bg-muted px-1 py-0.5 rounded">X-API-Key</code> on
-                redirect and analytics APIs. The full secret is shown only once at creation.
-              </CardDescription>
+          <Section title="Appearance" description="Follow your device, or pick one.">
+            <ThemeChoice />
+          </Section>
+
+          <Section
+            title="API keys"
+            description={
+              <>
+                For scripts and integrations: send the key in the <code className="rounded bg-muted px-1 py-0.5 text-[0.8125rem]">X-API-Key</code>{" "}
+                header to the links and analytics APIs. The full key is shown once, when you create it.
+              </>
+            }
+          >
+            <div className="flex items-center justify-between gap-4">
+              <p className="text-sm text-muted-foreground">
+                {isLoading ? "Loading keys…" : keys.length === 0 ? "No API keys yet." : `${keys.length} ${keys.length === 1 ? "key" : "keys"}`}
+              </p>
+              <Button size="sm" onClick={handleCreateKey} disabled={isCreating}>
+                {isCreating ? <Loader2 className="animate-spin" /> : <Plus />}
+                Create key
+              </Button>
             </div>
-            <Button size="sm" onClick={handleCreateKey} disabled={isCreating} className="gap-2 shrink-0">
-              {isCreating ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <Plus className="h-4 w-4" />
-              )}
-              New key
-            </Button>
-          </CardHeader>
-          <CardContent>
-            {isLoading ? (
-              <p className="text-sm text-muted-foreground">Loading keys…</p>
-            ) : keys.length === 0 ? (
-              <p className="text-sm text-muted-foreground">No API keys yet.</p>
-            ) : (
-              <ul className="divide-y divide-border rounded-lg border border-border">
+            {keys.length > 0 && (
+              <ul className="mt-3 divide-y rounded-lg border">
                 {keys.map((k) => (
-                  <li key={k.id} className="px-4 py-3 text-sm flex justify-between gap-4">
-                    <span className="font-mono text-xs truncate max-w-[70%]" title={k.prefix}>
+                  <li key={k.id} className="flex items-center justify-between gap-4 px-4 py-2.5 text-sm">
+                    <span className="truncate font-mono text-foreground" title={k.prefix}>
                       {k.prefix.slice(0, 12)}…
                     </span>
-                    <span className="text-muted-foreground text-xs shrink-0">
-                      {k.createdAt ? formatDate(k.createdAt) : "—"}
+                    <span className="shrink-0 text-meta text-muted-foreground">
+                      {k.createdAt ? `Created ${formatDate(k.createdAt)}` : "—"}
                     </span>
                   </li>
                 ))}
               </ul>
             )}
-          </CardContent>
-        </Card>
+          </Section>
 
-        <Card className="border-destructive/40">
-          <CardHeader>
-            <CardTitle className="text-destructive">Delete account</CardTitle>
-            <CardDescription>
-              Permanently deletes your account, all your short links (they stop working), your API keys and all click
-              data of your links. This cannot be undone. See the{" "}
-              <Link href="/privacy" className="underline underline-offset-4">Privacy Policy</Link>.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <Button variant="destructive" size="sm" className="gap-2" onClick={() => setDeleteOpen(true)}>
-              <Trash2 className="h-4 w-4" />
-              Delete my account
+          <Section
+            title="Delete account"
+            description={
+              <>
+                Deletes your account, your short links (they stop working), your API keys and the click data of your
+                links. This cannot be undone. See the{" "}
+                <Link href="/privacy" className="text-foreground underline underline-offset-4">
+                  privacy policy
+                </Link>
+                .
+              </>
+            }
+          >
+            <Button variant="destructive" size="sm" onClick={() => setDeleteOpen(true)}>
+              <Trash2 />
+              Delete account
             </Button>
-          </CardContent>
-        </Card>
+          </Section>
+        </div>
       </div>
 
       <Dialog
@@ -170,11 +208,10 @@ export default function SettingsPage() {
             </Button>
             <Button
               variant="destructive"
-              className="gap-2"
               disabled={deleteConfirm !== "DELETE" || deleteAccount.isPending}
               onClick={() => deleteAccount.mutate()}
             >
-              {deleteAccount.isPending && <Loader2 className="h-4 w-4 animate-spin" />}
+              {deleteAccount.isPending && <Loader2 className="animate-spin" />}
               Delete permanently
             </Button>
           </DialogFooter>
@@ -197,14 +234,14 @@ export default function SettingsPage() {
             </DialogDescription>
           </DialogHeader>
           {lastCreated?.key && (
-            <pre className="text-xs bg-muted p-3 rounded-md overflow-x-auto font-mono break-all">
+            <pre className="overflow-x-auto whitespace-pre-wrap break-all rounded-md bg-muted p-3 font-mono text-sm">
               {lastCreated.key}
             </pre>
           )}
           <DialogFooter>
-            <Button variant="outline" onClick={copyKey} className="gap-2">
-              <Copy className="h-4 w-4" />
-              Copy
+            <Button variant="outline" onClick={copyKey}>
+              <Copy />
+              Copy key
             </Button>
             <Button onClick={() => setRevealOpen(false)}>Done</Button>
           </DialogFooter>

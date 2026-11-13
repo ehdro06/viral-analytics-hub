@@ -2,6 +2,8 @@ import type { Config } from "tailwindcss";
 
 export default {
   darkMode: ["class"],
+  // hover: styles only on devices that can hover (no sticky hover on touch)
+  future: { hoverOnlyWhenSupported: true },
   content: ["./pages/**/*.{ts,tsx}", "./components/**/*.{ts,tsx}", "./app/**/*.{ts,tsx}", "./src/**/*.{ts,tsx}"],
   prefix: "",
   theme: {
@@ -14,68 +16,72 @@ export default {
     },
     extend: {
       fontFamily: {
-        sans: ['Inter', 'system-ui', '-apple-system', 'sans-serif'],
-        mono: ['JetBrains Mono', 'monospace'],
+        sans: ["var(--font-sans)", "system-ui", "sans-serif"],
+        mono: ["var(--font-mono)", "ui-monospace", "monospace"],
+      },
+      // Role scale: page title, section title, big metric, metric, body, meta
+      fontSize: {
+        "page-title": ["1.75rem", { lineHeight: "2.125rem", letterSpacing: "-0.015em", fontWeight: "600" }],
+        "section-title": ["1rem", { lineHeight: "1.5rem", fontWeight: "600" }],
+        "metric-xl": ["3.5rem", { lineHeight: "1", letterSpacing: "-0.03em", fontWeight: "600" }],
+        metric: ["1.625rem", { lineHeight: "2rem", letterSpacing: "-0.015em", fontWeight: "600" }],
+        meta: ["0.8125rem", { lineHeight: "1.25rem" }],
       },
       colors: {
-        border: "hsl(var(--border))",
-        input: "hsl(var(--input))",
-        ring: "hsl(var(--ring))",
-        background: "hsl(var(--background))",
-        foreground: "hsl(var(--foreground))",
+        border: "oklch(var(--border) / <alpha-value>)",
+        input: "oklch(var(--input) / <alpha-value>)",
+        ring: "oklch(var(--primary) / <alpha-value>)",
+        background: "oklch(var(--background) / <alpha-value>)",
+        foreground: "oklch(var(--foreground) / <alpha-value>)",
+        surface: "oklch(var(--surface) / <alpha-value>)",
         primary: {
-          DEFAULT: "hsl(var(--primary))",
-          foreground: "hsl(var(--primary-foreground))",
-        },
-        secondary: {
-          DEFAULT: "hsl(var(--secondary))",
-          foreground: "hsl(var(--secondary-foreground))",
-        },
-        destructive: {
-          DEFAULT: "hsl(var(--destructive))",
-          foreground: "hsl(var(--destructive-foreground))",
+          DEFAULT: "oklch(var(--primary) / <alpha-value>)",
+          foreground: "oklch(var(--primary-foreground) / <alpha-value>)",
         },
         muted: {
-          DEFAULT: "hsl(var(--muted))",
-          foreground: "hsl(var(--muted-foreground))",
+          DEFAULT: "oklch(var(--muted) / <alpha-value>)",
+          foreground: "oklch(var(--muted-foreground) / <alpha-value>)",
+        },
+        // shadcn names kept so existing primitives compile; they map onto the same few tokens
+        secondary: {
+          DEFAULT: "oklch(var(--muted) / <alpha-value>)",
+          foreground: "oklch(var(--foreground) / <alpha-value>)",
         },
         accent: {
-          DEFAULT: "hsl(var(--accent))",
-          foreground: "hsl(var(--accent-foreground))",
-        },
-        popover: {
-          DEFAULT: "hsl(var(--popover))",
-          foreground: "hsl(var(--popover-foreground))",
+          DEFAULT: "oklch(var(--muted) / <alpha-value>)",
+          foreground: "oklch(var(--foreground) / <alpha-value>)",
         },
         card: {
-          DEFAULT: "hsl(var(--card))",
-          foreground: "hsl(var(--card-foreground))",
+          DEFAULT: "oklch(var(--surface) / <alpha-value>)",
+          foreground: "oklch(var(--foreground) / <alpha-value>)",
         },
-        viral: {
-          DEFAULT: "hsl(var(--viral))",
-          foreground: "hsl(var(--viral-foreground))",
+        popover: {
+          DEFAULT: "oklch(var(--surface) / <alpha-value>)",
+          foreground: "oklch(var(--foreground) / <alpha-value>)",
         },
-        success: {
-          DEFAULT: "hsl(var(--success))",
-          foreground: "hsl(var(--success-foreground))",
+        destructive: {
+          DEFAULT: "oklch(var(--danger) / <alpha-value>)",
+          foreground: "oklch(var(--danger-foreground) / <alpha-value>)",
         },
-        chart: {
-          "1": "hsl(var(--chart-1))",
-          "2": "hsl(var(--chart-2))",
-          "3": "hsl(var(--chart-3))",
-          "4": "hsl(var(--chart-4))",
-          "5": "hsl(var(--chart-5))",
+        // Status: never the only signal, always next to a word
+        status: {
+          live: "oklch(var(--live) / <alpha-value>)",
+          paused: "oklch(var(--paused) / <alpha-value>)",
+          danger: "oklch(var(--danger) / <alpha-value>)",
         },
-        sidebar: {
-          DEFAULT: "hsl(var(--sidebar-background))",
-          foreground: "hsl(var(--sidebar-foreground))",
-          primary: "hsl(var(--sidebar-primary))",
-          "primary-foreground": "hsl(var(--sidebar-primary-foreground))",
-          accent: "hsl(var(--sidebar-accent))",
-          "accent-foreground": "hsl(var(--sidebar-accent-foreground))",
-          border: "hsl(var(--sidebar-border))",
-          ring: "hsl(var(--sidebar-ring))",
-        },
+        "chart-grid": "oklch(var(--chart-grid) / <alpha-value>)",
+      },
+      boxShadow: {
+        sm: "var(--shadow-sm)",
+        DEFAULT: "var(--shadow-sm)",
+        md: "var(--shadow-md)",
+        lg: "var(--shadow-md)",
+      },
+      transitionTimingFunction: {
+        out: "cubic-bezier(0.23, 1, 0.32, 1)",
+      },
+      transitionDuration: {
+        250: "250ms",
       },
       borderRadius: {
         lg: "var(--radius)",
@@ -91,25 +97,10 @@ export default {
           from: { height: "var(--radix-accordion-content-height)" },
           to: { height: "0" },
         },
-        "pulse-glow": {
-          "0%, 100%": { opacity: "0.4" },
-          "50%": { opacity: "1" },
-        },
-        "count-up": {
-          from: { opacity: "0", transform: "translateY(8px)" },
-          to: { opacity: "1", transform: "translateY(0)" },
-        },
-        "slide-in-right": {
-          from: { opacity: "0", transform: "translateX(20px)" },
-          to: { opacity: "1", transform: "translateX(0)" },
-        },
       },
       animation: {
-        "accordion-down": "accordion-down 0.2s ease-out",
-        "accordion-up": "accordion-up 0.2s ease-out",
-        "pulse-glow": "pulse-glow 2s ease-in-out infinite",
-        "count-up": "count-up 0.3s ease-out",
-        "slide-in": "slide-in-right 0.3s ease-out",
+        "accordion-down": "accordion-down 200ms cubic-bezier(0.23, 1, 0.32, 1)",
+        "accordion-up": "accordion-up 200ms cubic-bezier(0.23, 1, 0.32, 1)",
       },
     },
   },

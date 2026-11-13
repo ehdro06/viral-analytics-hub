@@ -1,13 +1,14 @@
 import { LinkItem } from "@/lib/types";
-import { shortLinkLabel, shortLinkUrl } from "@/lib/short-link";
+import { shortLinkHost, shortLinkUrl } from "@/lib/short-link";
 import { formatDate, formatDateTime } from "@/lib/format";
-import { motion } from "framer-motion";
-import { ExternalLink, Copy, MoreHorizontal, Trash2, Pause, Play, CalendarClock } from "lucide-react";
+import { CalendarClock, Copy, MoreHorizontal, Pause, Play, Trash2 } from "lucide-react";
 import { toast } from "sonner";
+import StatusLabel from "@/components/StatusLabel";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 
@@ -19,222 +20,170 @@ interface LinksTableProps {
   onEditExpiry?: (link: LinkItem) => void;
 }
 
-const STATUS_STYLES: Record<LinkItem["status"], string> = {
-  active: "bg-emerald-500/10 text-emerald-400",
-  paused: "bg-amber-500/10 text-amber-400",
-  expired: "bg-muted text-muted-foreground",
-};
+/** "https://www.example.com/a/very/long/path?x=1" -> "example.com/a/very…path?x=1" (start and end both survive). */
+export function truncateMiddle(url: string, max = 52): string {
+  const s = url.replace(/^https?:\/\//, "").replace(/^www\./, "");
+  if (s.length <= max) return s;
+  const tail = Math.floor(max / 3);
+  return `${s.slice(0, max - tail - 1)}…${s.slice(-tail)}`;
+}
 
-function StatusBadge({ link }: { link: LinkItem }) {
+const iconButton =
+  "pressable inline-flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground";
+
+function Actions({ link, onCopy, onDelete, onTogglePause, onEditExpiry }: {
+  link: LinkItem;
+  onCopy: () => void;
+} & Omit<LinksTableProps, "links" | "isLoading">) {
   return (
-    <div className="flex flex-col items-start gap-0.5">
-      <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium capitalize ${STATUS_STYLES[link.status]}`}>
-        {link.status}
-      </span>
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <button type="button" aria-label={`Actions for ${link.shortCode}`} className={iconButton}>
+          <MoreHorizontal className="h-4 w-4" />
+        </button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end">
+        <DropdownMenuItem onClick={onCopy}>
+          <Copy className="mr-2 h-4 w-4" />
+          Copy short link
+        </DropdownMenuItem>
+        <DropdownMenuItem onClick={() => onTogglePause?.(link)}>
+          {link.paused ? <Play className="mr-2 h-4 w-4" /> : <Pause className="mr-2 h-4 w-4" />}
+          {link.paused ? "Resume link" : "Pause link"}
+        </DropdownMenuItem>
+        <DropdownMenuItem onClick={() => onEditExpiry?.(link)}>
+          <CalendarClock className="mr-2 h-4 w-4" />
+          {link.expiresAt ? "Change expiry" : "Set expiry"}
+        </DropdownMenuItem>
+        <DropdownMenuSeparator />
+        <DropdownMenuItem className="text-destructive focus:text-destructive" onClick={() => onDelete?.(link.id)}>
+          <Trash2 className="mr-2 h-4 w-4" />
+          Delete link
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
+function Status({ link }: { link: LinkItem }) {
+  return (
+    <div>
+      <StatusLabel status={link.status} />
       {link.expiresAt && link.status !== "expired" && (
-        <span className="text-[11px] text-muted-foreground">until {formatDateTime(link.expiresAt)}</span>
+        <p className="text-meta text-muted-foreground">until {formatDateTime(link.expiresAt)}</p>
       )}
     </div>
   );
 }
 
-export default function LinksTable({
-  links,
-  isLoading = false,
-  onDelete,
-  onTogglePause,
-  onEditExpiry,
-}: LinksTableProps) {
+export default function LinksTable({ links, isLoading = false, onDelete, onTogglePause, onEditExpiry }: LinksTableProps) {
   const copyLink = (code: string) => {
     navigator.clipboard
       .writeText(shortLinkUrl(code))
-      .then(() => toast.success("Copied to clipboard!"))
+      .then(() => toast.success("Short link copied"))
       .catch(() => toast.error("Couldn't copy. Your browser blocked clipboard access."));
   };
 
   if (isLoading) {
     return (
-      <div className="rounded-xl border border-border bg-card p-10 text-center text-sm text-muted-foreground">
-        Loading links...
-      </div>
+      <p className="rounded-lg border p-10 text-center text-sm text-muted-foreground" aria-busy="true">
+        Loading links…
+      </p>
     );
   }
 
   if (links.length === 0) {
     return (
-      <div className="rounded-xl border border-dashed border-border bg-card p-10 text-center">
+      <div className="rounded-lg border border-dashed p-10 text-center">
         <p className="text-sm font-medium text-foreground">No links yet</p>
-        <p className="text-sm text-muted-foreground mt-1">Create your first short link to start tracking clicks.</p>
+        <p className="mt-1 text-sm text-muted-foreground">Create a short link to start counting clicks.</p>
       </div>
     );
   }
 
-  const label = (link: LinkItem) =>
-    link.pending ? "Creating..." : shortLinkLabel(link.shortCode);
+  const handlers = { onDelete, onTogglePause, onEditExpiry };
+  const Code = ({ link }: { link: LinkItem }) =>
+    link.pending ? (
+      <span className="text-sm text-muted-foreground">Creating…</span>
+    ) : (
+      <span className="inline-flex items-center gap-1">
+        <span className="font-mono text-sm font-medium text-primary">{link.shortCode}</span>
+        <button
+          type="button"
+          onClick={() => copyLink(link.shortCode)}
+          aria-label={`Copy short link ${link.shortCode}`}
+          className={iconButton}
+        >
+          <Copy className="h-3.5 w-3.5" />
+        </button>
+      </span>
+    );
 
   return (
-    <div className="rounded-xl border border-border bg-card overflow-hidden">
-      {/* Desktop Table */}
-      <div className="hidden md:block overflow-x-auto">
-        <table className="w-full">
-          <thead>
-            <tr className="border-b border-border">
-              <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-5 py-3">
-                Short Link
+    <div>
+      <p className="mb-2 text-meta text-muted-foreground">
+        Short links open at <span className="font-mono text-foreground">{shortLinkHost()}/</span>
+        <span className="font-mono text-primary">code</span>
+      </p>
+
+      <div className="overflow-hidden rounded-lg border bg-surface">
+        {/* Wide screens: table */}
+        <table className="hidden w-full text-sm md:table">
+          <thead className="bg-muted/60">
+            <tr className="border-b text-left text-meta text-muted-foreground">
+              <th scope="col" className="px-4 py-2.5 font-medium">Code</th>
+              <th scope="col" className="px-4 py-2.5 font-medium">Destination</th>
+              <th scope="col" className="px-4 py-2.5 font-medium">Status</th>
+              <th scope="col" className="px-4 py-2.5 text-right font-medium">Clicks</th>
+              <th scope="col" className="px-4 py-2.5 text-right font-medium">Created</th>
+              <th scope="col" className="w-12 px-2 py-2.5">
+                <span className="sr-only">Actions</span>
               </th>
-              <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-5 py-3">
-                Destination
-              </th>
-              <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-5 py-3">
-                Status
-              </th>
-              <th className="text-right text-xs font-medium text-muted-foreground uppercase tracking-wider px-5 py-3">
-                Clicks
-              </th>
-              <th className="text-right text-xs font-medium text-muted-foreground uppercase tracking-wider px-5 py-3">
-                Created
-              </th>
-              <th className="px-5 py-3" />
             </tr>
           </thead>
           <tbody>
-            {links.map((link, i) => (
-              <motion.tr
-                key={link.id}
-                initial={{ opacity: 0 }}
-                animate={{ opacity: link.pending ? 0.6 : 1 }}
-                transition={{ delay: i * 0.03 }}
-                className="border-b border-border/50 hover:bg-secondary/30 transition-colors"
-              >
-                <td className="px-5 py-3.5">
-                  <div className="flex items-center gap-2">
-                    <span className="font-mono text-sm text-primary font-medium">{label(link)}</span>
-                    {!link.pending && (
-                      <button
-                        onClick={() => copyLink(link.shortCode)}
-                        aria-label="Copy short link"
-                        className="p-1 rounded hover:bg-secondary text-muted-foreground hover:text-foreground"
-                      >
-                        <Copy className="w-3 h-3" />
-                      </button>
-                    )}
-                  </div>
+            {links.map((link) => (
+              <tr key={link.id} className={`border-b last:border-0 ${link.pending ? "opacity-60" : ""}`}>
+                <td className="whitespace-nowrap px-4 py-2.5">
+                  <Code link={link} />
                 </td>
-                <td className="px-5 py-3.5">
-                  <div className="flex items-center gap-1.5 max-w-xs">
-                    <span className="text-sm text-muted-foreground truncate">{link.originalUrl}</span>
-                    <ExternalLink className="w-3 h-3 text-muted-foreground/50 shrink-0" />
-                  </div>
-                </td>
-                <td className="px-5 py-3.5">{!link.pending && <StatusBadge link={link} />}</td>
-                <td className="px-5 py-3.5 text-right">
-                  <span className="font-mono text-sm text-foreground">
-                    {link.totalClicks.toLocaleString()}
+                <td className="max-w-0 px-4 py-2.5 lg:w-[38%]">
+                  <span className="block truncate text-foreground" title={link.originalUrl}>
+                    {truncateMiddle(link.originalUrl)}
                   </span>
                 </td>
-                <td className="px-5 py-3.5 text-right text-sm text-muted-foreground">
-                  {formatDate(link.createdAt)}
+                <td className="whitespace-nowrap px-4 py-2.5">{!link.pending && <Status link={link} />}</td>
+                <td className="px-4 py-2.5 text-right tabular-nums text-foreground">{link.totalClicks.toLocaleString("en-US")}</td>
+                <td className="whitespace-nowrap px-4 py-2.5 text-right text-muted-foreground">{formatDate(link.createdAt)}</td>
+                <td className="px-2 py-2.5 text-right">
+                  {!link.pending && <Actions link={link} onCopy={() => copyLink(link.shortCode)} {...handlers} />}
                 </td>
-                <td className="px-5 py-3.5 text-right">
-                  {!link.pending && (
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <button
-                          aria-label="Link actions"
-                          className="p-1 rounded hover:bg-secondary text-muted-foreground outline-none"
-                        >
-                          <MoreHorizontal className="w-4 h-4" />
-                        </button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end">
-                        <DropdownMenuItem onClick={() => copyLink(link.shortCode)}>
-                          <Copy className="mr-2 h-4 w-4" />
-                          <span>Copy Link</span>
-                        </DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => onTogglePause?.(link)}>
-                          {link.paused ? <Play className="mr-2 h-4 w-4" /> : <Pause className="mr-2 h-4 w-4" />}
-                          <span>{link.paused ? "Resume" : "Pause"}</span>
-                        </DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => onEditExpiry?.(link)}>
-                          <CalendarClock className="mr-2 h-4 w-4" />
-                          <span>{link.expiresAt ? "Change expiry" : "Set expiry"}</span>
-                        </DropdownMenuItem>
-                        <DropdownMenuItem
-                          className="text-destructive focus:text-destructive"
-                          onClick={() => onDelete?.(link.id)}
-                        >
-                          <Trash2 className="mr-2 h-4 w-4" />
-                          <span>Delete</span>
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  )}
-                </td>
-              </motion.tr>
+              </tr>
             ))}
           </tbody>
         </table>
-      </div>
 
-      {/* Mobile Cards */}
-      <div className="md:hidden divide-y divide-border">
-        {links.map((link, i) => (
-          <motion.div
-            key={link.id}
-            initial={{ opacity: 0 }}
-            animate={{ opacity: link.pending ? 0.6 : 1 }}
-            transition={{ delay: i * 0.05 }}
-            className="p-4 space-y-2"
-          >
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <span className="font-mono text-sm text-primary font-medium">{label(link)}</span>
-                {!link.pending && (
-                  <button
-                    onClick={() => copyLink(link.shortCode)}
-                    aria-label="Copy short link"
-                    className="p-1 rounded hover:bg-secondary text-muted-foreground"
-                  >
-                    <Copy className="w-3 h-3" />
-                  </button>
-                )}
+        {/* Narrow screens: stacked rows, same information in the same order */}
+        <ul className="divide-y md:hidden">
+          {links.map((link) => (
+            <li key={link.id} className={`px-4 py-3 ${link.pending ? "opacity-60" : ""}`}>
+              <div className="flex items-center justify-between gap-2">
+                <Code link={link} />
+                {!link.pending && <Actions link={link} onCopy={() => copyLink(link.shortCode)} {...handlers} />}
               </div>
-              {!link.pending && (
-                <div className="flex items-center gap-1">
-                  <button
-                    onClick={() => onTogglePause?.(link)}
-                    aria-label={link.paused ? "Resume link" : "Pause link"}
-                    className="p-1 rounded hover:bg-secondary text-muted-foreground hover:text-foreground"
-                  >
-                    {link.paused ? <Play className="w-4 h-4" /> : <Pause className="w-4 h-4" />}
-                  </button>
-                  <button
-                    onClick={() => onEditExpiry?.(link)}
-                    aria-label="Link expiry"
-                    className="p-1 rounded hover:bg-secondary text-muted-foreground hover:text-foreground"
-                  >
-                    <CalendarClock className="w-4 h-4" />
-                  </button>
-                  <button
-                    onClick={() => onDelete?.(link.id)}
-                    aria-label="Delete link"
-                    className="p-1 rounded hover:bg-secondary text-muted-foreground hover:text-destructive"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
-                </div>
-              )}
-            </div>
-            {!link.pending && <StatusBadge link={link} />}
-            <p className="text-xs text-muted-foreground truncate">{link.originalUrl}</p>
-            <div className="flex items-center justify-between">
-              <span className="text-xs text-muted-foreground">{formatDate(link.createdAt)}</span>
-              <span className="font-mono text-sm text-foreground font-medium">
-                {link.totalClicks.toLocaleString()} clicks
-              </span>
-            </div>
-          </motion.div>
-        ))}
+              <p className="mt-1 truncate text-sm text-foreground" title={link.originalUrl}>
+                {truncateMiddle(link.originalUrl, 40)}
+              </p>
+              <div className="mt-2 flex flex-wrap items-start justify-between gap-x-4 gap-y-1">
+                {!link.pending && <Status link={link} />}
+                <p className="text-meta text-muted-foreground">
+                  <span className="tabular-nums text-foreground">{link.totalClicks.toLocaleString("en-US")}</span> clicks ·{" "}
+                  {formatDate(link.createdAt)}
+                </p>
+              </div>
+            </li>
+          ))}
+        </ul>
       </div>
     </div>
   );

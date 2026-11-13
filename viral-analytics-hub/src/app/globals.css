@@ -1,66 +1,59 @@
-@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Inter:wght@300;400;500;600;700;800&display=swap');
-
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
+/*
+ * Design tokens. Colours are OKLCH components ("L C H") so Tailwind can add alpha: oklch(var(--x) / <alpha-value>).
+ * Neutrals carry a slight cool tint (hue ~258). One accent hue (blue, 262) for actions, focus and the primary chart
+ * series. Status colours (live, paused, danger) are separate from the accent and always appear next to text.
+ * Every text/background pair below is checked for WCAG AA (4.5:1 text, 3:1 UI borders).
+ */
 @layer base {
   :root {
-    --background: 222 47% 6%;
-    --foreground: 210 40% 96%;
+    --background: 0.985 0.003 255;
+    --foreground: 0.215 0.018 262;
+    --surface: 1 0 0;               /* cards, popovers, dialogs */
+    --muted: 0.962 0.005 255;       /* quiet fills: table header, hover, skeleton */
+    --muted-foreground: 0.47 0.018 262;
+    --border: 0.905 0.007 258;      /* hairlines */
+    --input: 0.65 0.012 258;        /* form control borders, 3:1 */
+    --primary: 0.5 0.19 262;
+    --primary-foreground: 0.99 0 0;
+    --live: 0.5 0.13 152;
+    --paused: 0.52 0.12 62;
+    --danger: 0.52 0.19 27;
+    --danger-foreground: 0.99 0 0;
+    --chart-grid: 0.93 0.005 258;
 
-    --card: 222 44% 8%;
-    --card-foreground: 210 40% 96%;
+    --radius: 0.5rem;
+    --shadow-sm: 0 1px 2px oklch(0.2 0.02 262 / 0.06);
+    --shadow-md: 0 4px 12px -2px oklch(0.2 0.02 262 / 0.12), 0 1px 3px oklch(0.2 0.02 262 / 0.08);
 
-    --popover: 222 44% 10%;
-    --popover-foreground: 210 40% 96%;
+    --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
 
-    --primary: 174 72% 52%;
-    --primary-foreground: 222 47% 6%;
+    color-scheme: light;
+  }
 
-    --secondary: 222 30% 14%;
-    --secondary-foreground: 210 40% 85%;
+  .dark {
+    --background: 0.165 0.009 262;
+    --foreground: 0.955 0.004 255;
+    --surface: 0.198 0.011 262;
+    --muted: 0.235 0.012 262;
+    --muted-foreground: 0.72 0.014 258;
+    --border: 0.3 0.013 262;
+    --input: 0.5 0.015 262;
+    --primary: 0.72 0.15 258;
+    --primary-foreground: 0.17 0.02 262;
+    --live: 0.75 0.15 152;
+    --paused: 0.8 0.13 75;
+    --danger: 0.7 0.17 25;
+    --danger-foreground: 0.17 0.02 262;
+    --chart-grid: 0.26 0.012 262;
 
-    --muted: 222 30% 12%;
-    --muted-foreground: 215 20% 55%;
+    --shadow-sm: 0 1px 2px oklch(0 0 0 / 0.3);
+    --shadow-md: 0 6px 16px -4px oklch(0 0 0 / 0.5), 0 1px 3px oklch(0 0 0 / 0.3);
 
-    --accent: 174 72% 52%;
-    --accent-foreground: 222 47% 6%;
-
-    --destructive: 0 72% 55%;
-    --destructive-foreground: 210 40% 98%;
-
-    --border: 222 20% 16%;
-    --input: 222 20% 16%;
-    --ring: 174 72% 52%;
-
-    --radius: 0.625rem;
-
-    --chart-1: 174 72% 52%;
-    --chart-2: 38 92% 60%;
-    --chart-3: 262 72% 62%;
-    --chart-4: 340 72% 58%;
-    --chart-5: 200 72% 55%;
-
-    --viral: 38 92% 60%;
-    --viral-foreground: 222 47% 6%;
-    --success: 142 60% 45%;
-    --success-foreground: 222 47% 6%;
-
-    --glow-primary: 174 72% 52%;
-    --glow-viral: 38 92% 60%;
-
-    --sidebar-background: 222 47% 5%;
-    --sidebar-foreground: 210 40% 80%;
-    --sidebar-primary: 174 72% 52%;
-    --sidebar-primary-foreground: 222 47% 6%;
-    --sidebar-accent: 222 30% 12%;
-    --sidebar-accent-foreground: 210 40% 90%;
-    --sidebar-border: 222 20% 14%;
-    --sidebar-ring: 174 72% 52%;
-
-    --font-sans: 'Inter', system-ui, -apple-system, sans-serif;
-    --font-mono: 'JetBrains Mono', monospace;
+    color-scheme: dark;
   }
 }
 
@@ -69,65 +62,68 @@
     @apply border-border;
   }
 
-  body {
-    @apply bg-background text-foreground font-sans antialiased;
-    font-family: var(--font-sans);
+  html {
+    -webkit-text-size-adjust: 100%;
+    scrollbar-color: oklch(var(--input)) oklch(var(--background));
   }
 
-  code, .font-mono {
-    font-family: var(--font-mono);
+  body {
+    @apply bg-background text-foreground font-sans antialiased;
+    font-feature-settings: "kern";
+    text-rendering: optimizeLegibility;
+  }
+
+  p, li {
+    text-wrap: pretty;
+  }
+
+  h1, h2, h3 {
+    text-wrap: balance;
+  }
+
+  ::selection {
+    background: oklch(var(--primary) / 0.22);
+    color: oklch(var(--foreground));
+  }
+
+  /* One focus style everywhere; only for keyboard focus */
+  :focus-visible {
+    outline: 2px solid oklch(var(--primary));
+    outline-offset: 2px;
+  }
+
+  /* 16px minimum on form fields: avoids zoom-on-focus on iOS and stays readable */
+  input, select, textarea {
+    font-size: max(16px, 1em);
+  }
+
+  code, kbd, samp, .font-mono {
+    font-family: var(--font-mono), ui-monospace, monospace;
+    font-feature-settings: "calt" 0;
   }
 }
 
 @layer utilities {
-  .glow-primary {
-    box-shadow: 0 0 20px -5px hsl(var(--glow-primary) / 0.3),
-                0 0 40px -10px hsl(var(--glow-primary) / 0.15);
+  /* Buttons and pressable controls: a small press confirms the click */
+  .pressable {
+    transition: transform 160ms var(--ease-out), background-color 160ms var(--ease-out), color 160ms var(--ease-out),
+      border-color 160ms var(--ease-out);
   }
-
-  .glow-viral {
-    box-shadow: 0 0 20px -5px hsl(var(--glow-viral) / 0.4),
-                0 0 40px -10px hsl(var(--glow-viral) / 0.2);
+  .pressable:active:not(:disabled) {
+    transform: scale(0.97);
   }
+}
 
-  .gradient-border {
-    border: 1px solid transparent;
-    background-clip: padding-box;
-    position: relative;
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
   }
-
-  .gradient-border::before {
-    content: '';
-    position: absolute;
-    inset: 0;
-    border-radius: inherit;
-    padding: 1px;
-    background: linear-gradient(135deg, hsl(var(--primary) / 0.4), hsl(var(--primary) / 0.05));
-    -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
-    mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
-    -webkit-mask-composite: xor;
-    mask-composite: exclude;
-    pointer-events: none;
-  }
-
-  .text-gradient-primary {
-    background: linear-gradient(135deg, hsl(var(--primary)), hsl(var(--chart-5)));
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    background-clip: text;
-  }
-
-  .text-gradient-viral {
-    background: linear-gradient(135deg, hsl(var(--viral)), hsl(var(--chart-4)));
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    background-clip: text;
-  }
-
-  .bg-grid {
-    background-image: 
-      linear-gradient(hsl(var(--border) / 0.5) 1px, transparent 1px),
-      linear-gradient(90deg, hsl(var(--border) / 0.5) 1px, transparent 1px);
-    background-size: 40px 40px;
+  .pressable:active:not(:disabled) {
+    transform: none;
   }
 }

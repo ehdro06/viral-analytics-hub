@@ -25,7 +25,7 @@ export default function LegalPage({ title, updated, children }: { title: string;
       >
         <h1>{title}</h1>
         <p className="!mt-1 text-meta text-muted-foreground">Last updated {updated}</p>
-        <div className="mt-6 max-w-[68ch]">{children}</div>
+        <div className="mt-6 max-w-[60ch]">{children}</div>
       </main>
     </div>
   );

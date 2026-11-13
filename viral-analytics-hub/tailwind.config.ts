@@ -2,6 +2,8 @@ import type { Config } from "tailwindcss";
 
 export default {
   darkMode: ["class"],
+  // hover: styles only on devices that can hover (no sticky hover on touch)
+  future: { hoverOnlyWhenSupported: true },
   content: ["./pages/**/*.{ts,tsx}", "./components/**/*.{ts,tsx}", "./app/**/*.{ts,tsx}", "./src/**/*.{ts,tsx}"],
   prefix: "",
   theme: {
@@ -77,6 +79,9 @@ export default {
       },
       transitionTimingFunction: {
         out: "cubic-bezier(0.23, 1, 0.32, 1)",
+      },
+      transitionDuration: {
+        250: "250ms",
       },
       borderRadius: {
         lg: "var(--radius)",

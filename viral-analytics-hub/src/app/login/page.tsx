@@ -1,11 +1,23 @@
 "use client";
 
 import { Button } from "@/components/ui/button";
+import Wordmark from "@/components/Wordmark";
 import { useUser } from "@/hooks/use-user";
-import { Github, Mail, Command } from "lucide-react";
+import { Github } from "lucide-react";
 import Link from "next/link";
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
+
+function GoogleMark() {
+  return (
+    <svg aria-hidden viewBox="0 0 24 24" className="h-4 w-4">
+      <path fill="#4285F4" d="M23.5 12.3c0-.8-.1-1.6-.2-2.3H12v4.4h6.5a5.6 5.6 0 0 1-2.4 3.6v3h3.9c2.3-2.1 3.5-5.2 3.5-8.7Z" />
+      <path fill="#34A853" d="M12 24c3.2 0 6-1.1 8-2.9l-3.9-3c-1.1.7-2.5 1.2-4.1 1.2-3.1 0-5.8-2.1-6.7-5H1.3v3.1A12 12 0 0 0 12 24Z" />
+      <path fill="#FBBC05" d="M5.3 14.3a7.2 7.2 0 0 1 0-4.6V6.6h-4a12 12 0 0 0 0 10.8l4-3.1Z" />
+      <path fill="#EA4335" d="M12 4.8c1.8 0 3.3.6 4.6 1.8l3.4-3.4A12 12 0 0 0 1.3 6.6l4 3.1c.9-2.9 3.6-4.9 6.7-4.9Z" />
+    </svg>
+  );
+}
 
 export default function LoginPage() {
   const backendBase = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8080";
@@ -19,81 +31,45 @@ export default function LoginPage() {
   }, [user, router]);
 
   return (
-    <div className="container relative h-screen max-w-none flex-col items-center justify-center grid lg:max-w-none lg:grid-cols-2 lg:px-0 bg-[#09090b] text-zinc-100">
-      
-      {/* Right Side (Visual/Branding) - Hidden on mobile */}
-      <div className="relative hidden h-full flex-col bg-zinc-900 p-10 text-white lg:flex border-r border-zinc-800">
-        <div className="absolute inset-0 bg-zinc-950" />
-        {/* Abstract Pattern / Gradient */}
-        <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[600px] h-[600px] bg-indigo-500/10 rounded-full blur-[120px] filter mix-blend-screen opacity-50 block" />
+    <div className="flex min-h-screen flex-col bg-background">
+      <header className="mx-auto flex h-14 w-full max-w-5xl items-center px-4 sm:px-6">
+        <Wordmark />
+      </header>
+      <main className="flex flex-1 items-start justify-center px-4 pt-[12vh]">
+        <div className="w-full max-w-sm">
+          <h1 className="text-page-title text-foreground">Sign in to ViralLink</h1>
+          <p className="mt-2 text-sm text-muted-foreground">
+            No password needed. Your first sign-in creates the account.
+          </p>
 
-        <div className="relative z-20 flex items-center text-lg font-medium tracking-tight">
-          <Command className="mr-2 h-6 w-6 text-indigo-500" />
-          ViralLink
-        </div>
-        <div className="relative z-20 mt-auto">
-          <blockquote className="space-y-2">
-            {/*
-            <p className="text-lg leading-relaxed text-zinc-300">
-              &ldquo;The analytics precision of ViralLink has completely transformed how we track our campaign performance. The safety features are a game changer.&rdquo;
-            </p>
-            <footer className="text-sm font-medium text-indigo-400">Sofia Davis, Security Analyst</footer>
-            */}
-          </blockquote>
-        </div>
-      </div>
-
-      {/* Left Side (Login Form) */}
-      <div className="lg:p-8 flex items-center justify-center h-full">
-        <div className="mx-auto flex w-full flex-col justify-center space-y-6 sm:w-[350px]">
-          <div className="flex flex-col space-y-2 text-center">
-            <h1 className="text-2xl font-semibold tracking-tight text-white">
-              Login to account
-            </h1>
-            <p className="text-sm text-zinc-400">
-              Enter email below to create your account
-            </p>
+          <div className="mt-8 grid gap-3">
+            <Button variant="outline" size="lg" asChild>
+              <a href={`${backendBase}/oauth2/authorization/google`}>
+                <GoogleMark />
+                Continue with Google
+              </a>
+            </Button>
+            <Button variant="outline" size="lg" asChild>
+              <a href={`${backendBase}/oauth2/authorization/github`}>
+                <Github />
+                Continue with GitHub
+              </a>
+            </Button>
           </div>
 
-          <div className="grid gap-6">
-            <div className="grid gap-3">
-                 {/* Real OAuth Endpoints */}
-                <Button variant="outline" className="bg-zinc-950 border-zinc-800 text-zinc-300 hover:bg-zinc-900 hover:text-white h-11 relative" asChild>
-                    <a href={`${backendBase}/oauth2/authorization/google`} className="flex items-center justify-center w-full">
-                    <Mail className="mr-2 h-4 w-4" />
-                    Sign in with Google
-                    </a>
-                </Button>
-                <Button variant="outline" className="bg-zinc-950 border-zinc-800 text-zinc-300 hover:bg-zinc-900 hover:text-white h-11 relative" asChild>
-                    <a href={`${backendBase}/oauth2/authorization/github`} className="flex items-center justify-center w-full">
-                        <Github className="mr-2 h-4 w-4" />
-                        Sign in with GitHub
-                    </a>
-                </Button>
-            </div>
-
-            <p className="px-8 text-center text-sm text-zinc-500">
-              By signing in, you agree to our{" "}
-              <Link href="/terms" className="underline underline-offset-4 hover:text-zinc-300 transition-colors">
-                Terms of Service
-              </Link>{" "}
-              and{" "}
-              <Link href="/privacy" className="underline underline-offset-4 hover:text-zinc-300 transition-colors">
-                Privacy Policy
-              </Link>
-              .
-            </p>
-          </div>
-        </div>
-      </div>
-      
-       {/* Absolute Positioned Link (Mobile view home) */}
-       <div className="absolute top-4 left-4 lg:hidden">
-            <Link href="/" className="flex items-center space-x-2 font-bold text-lg text-white">
-             <Command className="h-5 w-5 text-indigo-500" />
-             <span>ViralLink</span>
+          <p className="mt-6 text-meta text-muted-foreground">
+            By signing in, you agree to the{" "}
+            <Link href="/terms" className="text-foreground underline underline-offset-4">
+              terms of service
+            </Link>{" "}
+            and the{" "}
+            <Link href="/privacy" className="text-foreground underline underline-offset-4">
+              privacy policy
             </Link>
-       </div>
+            .
+          </p>
+        </div>
+      </main>
     </div>
   );
 }

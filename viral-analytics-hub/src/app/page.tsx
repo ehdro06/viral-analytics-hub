@@ -1,140 +1,107 @@
 'use client';
 
+import Link from 'next/link';
+import { Activity, CalendarClock, KeyRound, ShieldCheck, type LucideIcon } from 'lucide-react';
 import { UrlExpander } from '@/components/UrlExpander';
 import { LandingPageHeader } from '@/components/LandingPageHeader';
 import { Button } from '@/components/ui/button';
-import Link from 'next/link';
-import { 
-  BarChart3, 
-  Globe2, 
-  Link2, 
-  Zap, 
-  ShieldCheck, 
-  Lock,
-  ArrowRight,
-  type LucideIcon,
-} from 'lucide-react';
-import { Card, CardContent } from "@/components/ui/card";
+
+const FACTS = [
+  { value: '1,000 / s', label: 'redirects in a local k6 load test, p95 under 2\u00a0ms, no clicks lost' },
+  { value: '12 months', label: 'click data is kept, then deleted; visitor IPs are anonymised first' },
+  { value: 'Free', label: 'while in beta, with a Google or GitHub sign-in' },
+];
+
+const FEATURES: { icon: LucideIcon; title: string; text: string }[] = [
+  {
+    icon: Activity,
+    title: 'See clicks as they happen',
+    text: 'The dashboard shows the last minute, an hourly chart for two days, and which sites and countries clicks come from.',
+  },
+  {
+    icon: CalendarClock,
+    title: 'Pause or expire a link',
+    text: 'A paused or expired link shows a short "no longer active" page instead of redirecting. Resume it any time.',
+  },
+  {
+    icon: ShieldCheck,
+    title: 'Unsafe links are refused',
+    text: 'Every destination is checked with Google Safe Browsing before a short link is created.',
+  },
+  {
+    icon: KeyRound,
+    title: 'Use it from your own code',
+    text: 'Create an API key in Settings and send it in the X-API-Key header to create links and read click data.',
+  },
+];
 
 export default function LandingPage() {
   return (
-    <div className="min-h-screen bg-[#0A0A0A] text-slate-100 flex flex-col font-sans selection:bg-blue-500/30">
+    <div className="flex min-h-screen flex-col bg-background text-foreground">
       <LandingPageHeader />
 
-      {/* Hero / Tool Section */}
       <main className="flex-1">
-        <section className="container mx-auto px-4 py-16 md:py-24 relative overflow-hidden">
-          {/* Background Gradient */}
-          <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[1000px] h-[400px] bg-blue-500/5 rounded-full blur-[120px] -z-10" />
-          
-          <UrlExpander />
-
-          <div className="mt-16 flex flex-col items-center text-center animate-in fade-in slide-in-from-bottom-8 duration-700 delay-200">
-            <p className="text-sm font-semibold text-blue-400 mb-4 tracking-wider uppercase">Beyond simple redirects</p>
-            <h2 className="text-3xl md:text-5xl font-bold tracking-tight mb-6 max-w-2xl bg-gradient-to-r from-white via-slate-200 to-slate-400 bg-clip-text text-transparent">
-              Turn your links into powerful marketing assets
-            </h2>
-            <p className="text-lg text-slate-400 max-w-xl mb-8">
-              ViralLink gives you complete control over your links. Shorten, track, and analyze every click in real-time.
+        <section className="mx-auto max-w-5xl px-4 pb-16 pt-12 sm:px-6 sm:pt-20">
+          <div className="max-w-2xl">
+            <h1 className="text-4xl font-semibold leading-[1.1] tracking-[-0.025em] sm:text-5xl">
+              Short links with click analytics
+            </h1>
+            <p className="mt-4 text-lg text-muted-foreground">
+              Shorten a link, share it, and see who clicks: when, from which site, from which country. The redirect
+              answers right away; counting happens in the background.
             </p>
-            <div className="flex flex-col sm:flex-row gap-4">
-              <div className="relative group">
-                <div className="absolute -inset-0.5 bg-gradient-to-r from-blue-600 to-indigo-600 rounded-lg blur opacity-75 group-hover:opacity-100 transition duration-1000 group-hover:duration-200 animate-pulse-glow"></div>
-                <Link href="/login" className="relative block">
-                  <Button size="lg" className="relative h-12 px-8 text-lg bg-black hover:bg-slate-900 border border-slate-800 text-white">
-                    Start Shortening for Free <ArrowRight className="ml-2 h-5 w-5" />
-                  </Button>
-                </Link>
+          </div>
+
+          <div className="mt-10">
+            <UrlExpander />
+          </div>
+
+          <dl className="mt-10 grid gap-6 border-t pt-6 sm:grid-cols-3">
+            {FACTS.map((f) => (
+              <div key={f.value}>
+                <dt className="text-metric text-foreground">{f.value}</dt>
+                <dd className="mt-1 text-sm text-muted-foreground">{f.label}</dd>
               </div>
-            </div>
-          </div>
+            ))}
+          </dl>
         </section>
 
-        {/* Feature Grid */}
-        <section className="bg-slate-900/50 py-24 border-y border-slate-800">
-          <div className="container mx-auto px-4">
-            <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-8">
-              <FeatureCard 
-                icon={BarChart3}
-                title="Real-time Analytics"
-                description="Monitor clicks as they happen. Track location, device type, and referral sources instantly."
-              />
-              <FeatureCard 
-                icon={Globe2}
-                title="Global Reach"
-                description="Our edge network ensures your links load instantly from anywhere in the world."
-              />
-              <FeatureCard 
-                icon={ShieldCheck}
-                title="Safety First"
-                description="Built-in malware scanning and phishing protection keeps your audience safe."
-              />
-              <FeatureCard 
-                icon={Link2}
-                title="Custom Aliases"
-                description="Create branded links that build trust and increase click-through rates."
-              />
-               <FeatureCard 
-                icon={Zap}
-                title="High Performance"
-                description="Optimized redirect engine handling millions of requests with sub-millisecond latency."
-              />
-              <FeatureCard 
-                icon={Lock}
-                title="Enterprise Security"
-                description="SSO, audit logs, and advanced access controls for teams."
-              />
-            </div>
-          </div>
-        </section>
-
-        {/* CTA Section */}
-        <section className="container mx-auto px-4 py-24 text-center">
-          <div className="max-w-3xl mx-auto space-y-8">
-            <h2 className="text-3xl font-bold tracking-tight sm:text-4xl text-slate-50">Ready to take control?</h2>
-            <p className="text-xl text-muted-foreground">
-              Free while in beta. Sign in with Google or GitHub and create your first link in seconds.
-            </p>
-            <Link href="/login">
-              <Button size="lg" className="h-14 px-8 text-lg rounded-full shadow-lg hover:shadow-xl transition-all">
-                Get Started Now
+        <section aria-labelledby="features-title" className="border-t bg-surface">
+          <div className="mx-auto max-w-5xl px-4 py-16 sm:px-6">
+            <h2 id="features-title" className="text-2xl font-semibold tracking-tight">
+              What you get after signing in
+            </h2>
+            <ul className="mt-8 grid gap-x-10 gap-y-8 sm:grid-cols-2">
+              {FEATURES.map(({ icon: Icon, title, text }) => (
+                <li key={title} className="flex gap-3">
+                  <Icon aria-hidden className="mt-0.5 h-5 w-5 shrink-0 text-primary" />
+                  <div>
+                    <h3 className="font-medium text-foreground">{title}</h3>
+                    <p className="mt-1 text-sm text-muted-foreground">{text}</p>
+                  </div>
+                </li>
+              ))}
+            </ul>
+            <div className="mt-12 flex flex-col items-start gap-3 sm:flex-row sm:items-center">
+              <Button asChild size="lg">
+                <Link href="/login">Sign in to create links</Link>
               </Button>
-            </Link>
+              <p className="text-sm text-muted-foreground">No password: Google or GitHub. Free while in beta.</p>
+            </div>
           </div>
         </section>
       </main>
 
-      {/* Footer */}
-      <footer className="border-t border-slate-800 bg-slate-950 py-10">
-        <div className="container mx-auto px-4 flex flex-col sm:flex-row gap-6 sm:items-center justify-between text-sm text-slate-400">
-          <div>
-            <p className="font-bold text-slate-100">ViralLink</p>
-            <p className="mt-1">Short links with click analytics. Free while in beta.</p>
-          </div>
-          <nav className="flex flex-wrap gap-x-6 gap-y-2">
-            <Link href="/privacy" className="hover:text-blue-400 transition-colors">Privacy Policy</Link>
-            <Link href="/terms" className="hover:text-blue-400 transition-colors">Terms of Service</Link>
-            <a href="mailto:ideal3339@gmail.com" className="hover:text-blue-400 transition-colors">Contact</a>
+      <footer className="border-t">
+        <div className="mx-auto flex max-w-5xl flex-col gap-4 px-4 py-8 text-sm text-muted-foreground sm:flex-row sm:items-center sm:justify-between sm:px-6">
+          <p>© 2026 ViralLink · Short links with click analytics</p>
+          <nav aria-label="Legal" className="flex flex-wrap gap-x-6 gap-y-2">
+            <Link href="/privacy" className="hover:text-foreground">Privacy policy</Link>
+            <Link href="/terms" className="hover:text-foreground">Terms of service</Link>
+            <a href="mailto:ideal3339@gmail.com" className="hover:text-foreground">Contact</a>
           </nav>
         </div>
-        <p className="container mx-auto px-4 mt-8 text-center text-xs text-slate-500">© 2026 ViralLink</p>
       </footer>
     </div>
-  );
-}
-
-function FeatureCard({ icon: Icon, title, description }: { icon: LucideIcon; title: string; description: string }) {
-  return (
-    <Card className="border-0 shadow-none bg-transparent">
-      <CardContent className="pt-6 space-y-4">
-        <div className="w-12 h-12 rounded-lg bg-blue-500/10 flex items-center justify-center text-blue-400">
-          <Icon className="h-6 w-6" />
-        </div>
-        <h3 className="font-bold text-xl text-slate-100">{title}</h3>
-        <p className="text-slate-400 leading-relaxed">
-          {description}
-        </p>
-      </CardContent>
-    </Card>
   );
 }

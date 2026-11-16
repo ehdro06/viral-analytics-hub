@@ -44,7 +44,7 @@ export default function TimeSeriesChart({ data, height = 240 }: TimeSeriesChartP
   return (
     <div className="chart text-primary" style={{ height }}>
       <ResponsiveContainer width="100%" height="100%">
-        <AreaChart data={points} margin={{ top: 8, right: 4, left: 0, bottom: 0 }}>
+        <AreaChart data={points} margin={{ top: 8, right: 28, left: 0, bottom: 0 }}>
           <CartesianGrid vertical={false} />
           <XAxis
             dataKey="t"

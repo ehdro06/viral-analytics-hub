@@ -145,20 +145,48 @@ public class UrlExpandService {
         try {
             String host = uri.getHost();
             if (host == null) return false;
-            InetAddress[] addrs = InetAddress.getAllByName(host);
-            for (InetAddress addr : addrs) {
-                if (addr.isAnyLocalAddress() || addr.isLoopbackAddress() || addr.isLinkLocalAddress() || addr.isSiteLocalAddress()) {
-                    return false;
-                }
-                String ip = addr.getHostAddress();
-                if (ip.startsWith("169.254.")) return false; // link-local
-                if (ip.startsWith("fc") || ip.startsWith("fd")) return false; // unique local IPv6
+            for (InetAddress addr : InetAddress.getAllByName(host)) {
+                if (isNonPublic(addr)) return false;
             }
             return true;
         } catch (Exception e) {
             log.debug("DNS resolution failed for {}: {}", uri, e.getMessage());
             return false;
         }
+    }
+
+    /**
+     * True for any address the expander must never contact: private, loopback, link-local (incl. the cloud metadata
+     * server 169.254.169.254), carrier-grade NAT, "this network", benchmarking, multicast and reserved ranges, and
+     * their IPv6 equivalents. IPv4-mapped IPv6 (::ffff:10.0.0.1) arrives as an Inet4Address and is checked as IPv4.
+     *
+     * <p>Known limit: the name is resolved here and again by the HTTP client, so a hostile DNS server could answer
+     * differently the second time (DNS rebinding). The damage is bounded: only a status code and a Location header
+     * are returned, and the metadata server requires a header this client never sends.
+     */
+    static boolean isNonPublic(InetAddress addr) {
+        if (addr.isAnyLocalAddress() || addr.isLoopbackAddress() || addr.isLinkLocalAddress()
+                || addr.isSiteLocalAddress() || addr.isMulticastAddress()) {
+            return true;
+        }
+        byte[] b = addr.getAddress();
+        if (b.length == 4) {
+            int o1 = b[0] & 0xff, o2 = b[1] & 0xff, o3 = b[2] & 0xff;
+            return o1 == 0                                   // 0.0.0.0/8 "this network"
+                    || o1 == 10                              // 10.0.0.0/8
+                    || (o1 == 100 && o2 >= 64 && o2 <= 127)  // 100.64.0.0/10 carrier-grade NAT
+                    || o1 == 127                             // loopback
+                    || (o1 == 169 && o2 == 254)              // link-local, metadata server
+                    || (o1 == 172 && o2 >= 16 && o2 <= 31)   // 172.16.0.0/12
+                    || (o1 == 192 && o2 == 0 && o3 == 0)     // 192.0.0.0/24 IETF protocol assignments
+                    || (o1 == 192 && o2 == 168)              // 192.168.0.0/16
+                    || (o1 == 198 && (o2 == 18 || o2 == 19)) // 198.18.0.0/15 benchmarking
+                    || o1 >= 224;                            // multicast and reserved 240.0.0.0/4
+        }
+        int first = b[0] & 0xff;
+        return (first & 0xfe) == 0xfc                        // fc00::/7 unique local
+                || first == 0xff                             // ff00::/8 multicast
+                || (first == 0xfe && (b[1] & 0xc0) == 0x80); // fe80::/10 link-local
     }
 
     public boolean checkSafeBrowsing(String url) {

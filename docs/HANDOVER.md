@@ -5,7 +5,7 @@ Last updated after commit **`a969228`** (`feat: OAuth JWT bridge, settings UI, a
 > **Deploy-readiness pass (later):** env-driven config, `prod` profiles, Dockerfiles and a manual Cloud Run
 > workflow were added; see [DEPLOY.md](./DEPLOY.md). Corrections to this note found on the way:
 > Spring Boot is **4.1.1** (not 4.1-M1); the live auth flow is **session cookie -> `GET /api/v1/users/me` -> JWT**
-> (`OAuth2LoginSuccessHandler` and `/auth/callback` below are unused since merge `510521e`); Next.js has **no**
+> (the old `OAuth2LoginSuccessHandler` and `/auth/callback` token-in-URL flow were deleted in the security pass); Next.js has **no**
 > `output: "standalone"`; analytics does **not** read `API_KEY_SIGNING_SECRET`; Spring Session was not actually
 > active until `user/build.gradle` switched to `spring-boot-starter-session-data-redis`.
 
@@ -52,15 +52,14 @@ Last updated after commit **`a969228`** (`feat: OAuth JWT bridge, settings UI, a
 
 **User service**
 
-- OAuth success → redirect to `{app.frontend.url}/auth/callback?token=…&id=…&email=…&name=…` (`OAuth2LoginSuccessHandler`).
+- OAuth success → redirect to the frontend; the frontend then calls `GET /api/v1/users/me` (session cookie) for a JWT.
 - Default frontend URL: **`http://localhost:3000`** (`app.frontend.url` in `user/.../application.properties`).
 - `JwtAuthenticationFilter`: Bearer JWT → principal `Long userId` (same claim shape as redirect/analytics: `userId` claim + email subject).
-- `GET /api/v1/users/me`, `GET /api/v1/users/keys`, `POST /api/v1/users/keys` — **JWT only** (not session cookie).
+- `GET /api/v1/users/me` (session cookie); `GET/POST /api/v1/users/keys`, `DELETE /api/v1/users/me` accept the session or the JWT (#18).
 - API key list returns `id`, `prefix`, `createdAt` — **never** the full secret.
 
 **Frontend**
 
-- `/auth/callback` — stores JWT + profile in Zustand (`use-auth-store`, persists **token only**).
 - `/settings` — profile, logout, API key create + one-time reveal modal (`use-api-keys`).
 - `lib/auth-fetch.ts` — attaches Bearer, **401 → logout → `/login`**.
 - Login uses **`/oauth2/authorization/{google|github}`** via Next rewrites (same origin :3000).
@@ -145,11 +144,21 @@ the link-creation 404 fix (#11), Privacy Policy / Terms / account deletion / 12-
 - Data export ("download my data") to complete the GDPR portability right; today it is by email request.
 - Destination health checks (broken/unsafe target URLs) as a periodic job.
 - A short domain for ViralLink itself (short links currently use the long Cloud Run URL).
-- Unused code from the older auth design: `OAuth2LoginSuccessHandler`, `/auth/callback` page.
 - Vitest config excluded from the Next typecheck (missing `@vitejs/plugin-react-swc`).
 - WebSockets, Stripe billing: out of scope.
 
 ---
+
+## Security baseline (audit, Nov 2026)
+
+- Actuator: only `health` is exposed (redirect and analytics used to serve `/actuator/metrics` publicly).
+- Website sends `X-Frame-Options: DENY`, a CSP with `frame-ancestors 'none'`, `nosniff`, `Referrer-Policy`,
+  `Permissions-Policy` (`next.config.ts`); HSTS comes from Vercel.
+- Logout is POST-only (CSRF protection is off on the user service; the session cookie is SameSite=Lax).
+- URL expander refuses every private/reserved IPv4/IPv6 range on every hop (`UrlExpandService.isNonPublic`).
+  Known limit: DNS rebinding between the check and the request; impact bounded (status + Location only).
+- Accepted trade-offs: Redis-backed checks fail open; Safe Browsing fails open; API keys cannot be revoked
+  individually; a destination can turn malicious after the creation-time check.
 
 ## Be careful about
 
@@ -174,11 +183,11 @@ the link-creation 404 fix (#11), Privacy Policy / Terms / account deletion / 12-
 
 | Area | Files |
 |------|--------|
-| OAuth → JWT | `user/.../OAuth2LoginSuccessHandler.java`, `SecurityConfig.java` |
+| OAuth → session → JWT | `user/.../SecurityConfig.java`, `UserController.java` (`/me`) |
 | JWT filter (user) | `user/.../JwtAuthenticationFilter.java` |
 | User API | `user/.../UserController.java`, `UserService.java` |
 | JWT filter (redirect/analytics) | `redirect/.../JwtAuthenticationFilter.java` (also validates `X-API-Key`) |
-| Frontend auth | `viral-analytics-hub/src/hooks/use-auth-store.ts`, `use-user.ts`, `lib/auth-fetch.ts`, `app/auth/callback/page.tsx`, `app/settings/page.tsx` |
+| Frontend auth | `viral-analytics-hub/src/hooks/use-auth-store.ts`, `use-user.ts`, `lib/auth-fetch.ts`, `app/settings/page.tsx` |
 | BFF proxies | `viral-analytics-hub/next.config.ts` |
 | Deleted-account denylist | `user/.../UserService.deleteAccount`, `isDeleted` in both `JwtAuthenticationFilter`s |
 | Retention | `analytics/.../RetentionService.java` |

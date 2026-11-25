@@ -37,13 +37,17 @@ public class ExpandController {
             
             // Check Google Safe Browsing on the final URL if it resolved successfully
             if (result.isSafe() && result.getFinalUrl() != null) {
-                boolean isGoogleSafe = urlExpandService.checkSafeBrowsing(result.getFinalUrl());
-                if (!isGoogleSafe) {
-                    result.setSafe(false);
-                    result.setNote("Flagged by Google Safe Browsing");
+                switch (urlExpandService.safeBrowsingVerdict(result.getFinalUrl())) {
+                    case UNSAFE -> {
+                        result.setSafe(false);
+                        result.setSafetyChecked(true);
+                        result.setNote("Flagged by Google Safe Browsing");
+                    }
+                    case SAFE -> result.setSafetyChecked(true);
+                    case UNAVAILABLE -> result.setSafetyChecked(false); // don't claim "safe" for a check that didn't run
                 }
             }
-            
+
             return ResponseEntity.ok(result);
         } catch (IllegalArgumentException e) {
             return ResponseEntity.badRequest().build();

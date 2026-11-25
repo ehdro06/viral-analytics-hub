@@ -189,9 +189,17 @@ public class UrlExpandService {
                 || (first == 0xfe && (b[1] & 0xc0) == 0x80); // fe80::/10 link-local
     }
 
+    /** Outcome of a Google Safe Browsing lookup. UNAVAILABLE = not checked (no key, disabled, or the API failed). */
+    public enum SafetyVerdict { SAFE, UNSAFE, UNAVAILABLE }
+
+    /** True unless Google flags the URL. Fails open: link creation goes ahead when the check is unavailable. */
     public boolean checkSafeBrowsing(String url) {
+        return safeBrowsingVerdict(url) != SafetyVerdict.UNSAFE;
+    }
+
+    public SafetyVerdict safeBrowsingVerdict(String url) {
         if (!safeBrowsingEnabled || safeBrowsingApiKey == null || safeBrowsingApiKey.isBlank()) {
-            return true; // Skip check if disabled
+            return SafetyVerdict.UNAVAILABLE;
         }
 
         /* 
@@ -226,14 +234,13 @@ public class UrlExpandService {
             
             if (response.statusCode() == 200) {
                 // If response body is empty object {}, it's safe. If it has matches, it's unsafe.
-                return !response.body().contains("\"matches\":");
-            } else {
-                 log.warn("Safe Browsing API Error: {}", response.statusCode());
-                return true; // Fail open
+                return response.body().contains("\"matches\":") ? SafetyVerdict.UNSAFE : SafetyVerdict.SAFE;
             }
+            log.warn("Safe Browsing API Error: {}", response.statusCode());
+            return SafetyVerdict.UNAVAILABLE;
         } catch (Exception e) {
             log.error("Safe Browsing Check Failed", e);
-            return true; // Fail open
+            return SafetyVerdict.UNAVAILABLE;
         }
     }
 
@@ -254,6 +261,8 @@ public class UrlExpandService {
         private List<Hop> hops;
         private String note;
         private boolean safe;
+        /** False when Google Safe Browsing could not be asked; "safe" then only means no loop or blocked hop. */
+        private boolean safetyChecked;
 
         public static ExpandResult loop(String input, List<Hop> hops) {
             return ExpandResult.builder()

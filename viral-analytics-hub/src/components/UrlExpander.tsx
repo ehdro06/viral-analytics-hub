@@ -1,7 +1,7 @@
 'use client';
 
 import { useRef, useState } from 'react';
-import { ArrowRight, ShieldCheck, ShieldAlert, Loader2, Link as LinkIcon, XCircle } from 'lucide-react';
+import { ArrowRight, Shield, ShieldCheck, ShieldAlert, Loader2, Link as LinkIcon, XCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 
@@ -16,6 +16,8 @@ interface ExpandResult {
   finalUrl: string;
   hops: Hop[];
   safe: boolean;
+  /** False when Google Safe Browsing couldn't be asked: then "safe" only means no loop or blocked hop. */
+  safetyChecked: boolean;
   message?: string;
 }
 
@@ -50,6 +52,7 @@ export function UrlExpander() {
         finalUrl: data.finalUrl,
         hops: data.hops ?? [],
         safe: data.safe ?? true,
+        safetyChecked: data.safetyChecked ?? false,
         message: data.message ?? data.note,
       });
     } catch {
@@ -117,10 +120,15 @@ export function UrlExpander() {
             <div>
               <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
                 <h3 className="text-sm font-medium text-muted-foreground">Final destination</h3>
-                {result.safe ? (
+                {result.safe && result.safetyChecked ? (
                   <span className="inline-flex items-center gap-1.5 text-sm text-foreground">
                     <ShieldCheck aria-hidden className="h-4 w-4 text-status-live" />
                     No known threats
+                  </span>
+                ) : result.safe ? (
+                  <span className="inline-flex items-center gap-1.5 text-sm text-foreground">
+                    <Shield aria-hidden className="h-4 w-4 text-muted-foreground" />
+                    Safety not checked
                   </span>
                 ) : (
                   <span className="inline-flex items-center gap-1.5 text-sm font-medium text-foreground">
@@ -130,6 +138,12 @@ export function UrlExpander() {
                 )}
               </div>
               <p className="mt-2 break-all rounded-md bg-muted px-3 py-2 font-mono text-sm text-foreground">{result.finalUrl}</p>
+              {result.safe && !result.safetyChecked && (
+                <p className="mt-2 text-meta text-muted-foreground">
+                  Google Safe Browsing didn&apos;t answer, so this destination wasn&apos;t checked for malware or
+                  phishing. Try again in a moment.
+                </p>
+              )}
             </div>
 
             <div>

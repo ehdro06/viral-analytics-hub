@@ -157,7 +157,8 @@ the link-creation 404 fix (#11), Privacy Policy / Terms / account deletion / 12-
 - Logout is POST-only (CSRF protection is off on the user service; the session cookie is SameSite=Lax).
 - URL expander refuses every private/reserved IPv4/IPv6 range on every hop (`UrlExpandService.isNonPublic`).
   Known limit: DNS rebinding between the check and the request; impact bounded (status + Location only).
-- Accepted trade-offs: Redis-backed checks fail open; Safe Browsing fails open; API keys cannot be revoked
+- Accepted trade-offs: Redis-backed checks fail open; Safe Browsing fails open for link creation (the expander
+  says "Safety not checked" instead of claiming safe when Google can't be asked); API keys cannot be revoked
   individually; a destination can turn malicious after the creation-time check.
 
 ## Be careful about

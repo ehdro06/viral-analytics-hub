@@ -51,14 +51,29 @@ class ExpandControllerTest {
         when(urlExpandService.expand(inputUrl)).thenReturn(mockResult);
         
         // When checking for safe browsing, pretend the URL is indeed safe
-        when(urlExpandService.checkSafeBrowsing(finalUrl)).thenReturn(true);
+        when(urlExpandService.safeBrowsingVerdict(finalUrl)).thenReturn(UrlExpandService.SafetyVerdict.SAFE);
 
         // 2. Act & 3. Assert: Perform the GET request and verify the JSON response
         mockMvc.perform(get("/api/expand").param("url", inputUrl))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.inputUrl").value(inputUrl))
                 .andExpect(jsonPath("$.finalUrl").value(finalUrl))
-                .andExpect(jsonPath("$.safe").value(true));
+                .andExpect(jsonPath("$.safe").value(true))
+                .andExpect(jsonPath("$.safetyChecked").value(true));
+    }
+
+    @Test
+    void testExpand_SafeBrowsingUnavailable_SaysNotChecked() throws Exception {
+        String inputUrl = "http://short.url";
+        String finalUrl = "http://long.url";
+        when(urlExpandService.expand(inputUrl)).thenReturn(ExpandResult.builder()
+                .inputUrl(inputUrl).finalUrl(finalUrl).shortened(true).safe(true).hops(List.of()).build());
+        when(urlExpandService.safeBrowsingVerdict(finalUrl)).thenReturn(UrlExpandService.SafetyVerdict.UNAVAILABLE);
+
+        mockMvc.perform(get("/api/expand").param("url", inputUrl))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.safe").value(true))
+                .andExpect(jsonPath("$.safetyChecked").value(false));
     }
 
     @Test
@@ -78,7 +93,7 @@ class ExpandControllerTest {
         when(urlExpandService.expand(inputUrl)).thenReturn(mockResult);
         
         // Simulating that Google Safe Browsing flagged the final destination!
-        when(urlExpandService.checkSafeBrowsing(finalUrl)).thenReturn(false);
+        when(urlExpandService.safeBrowsingVerdict(finalUrl)).thenReturn(UrlExpandService.SafetyVerdict.UNSAFE);
 
         // 2. Act & 3. Assert: The status is 200 OK, but the JSON payload warns the user
         mockMvc.perform(get("/api/expand").param("url", inputUrl))
